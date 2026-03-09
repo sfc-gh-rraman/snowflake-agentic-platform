@@ -1,0 +1,501 @@
+"""Snowflake Agentic Platform CLI.
+
+A zero-to-one platform for transforming use case descriptions + raw data
+into deployed AI applications on Snowflake.
+
+Usage:
+    agentic-platform run "Your use case description" --data @STAGE/path
+    agentic-platform status <plan_id>
+    agentic-platform agents list
+    agentic-platform setup
+"""
+
+import json
+import os
+from typing import Optional
+
+import typer
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
+
+app = typer.Typer(
+    name="agentic-platform",
+    help="Zero-to-One Agentic Data Platform - From use case to deployed AI app",
+    no_args_is_help=True,
+)
+
+console = Console()
+
+
+def get_connection_name() -> str:
+    """Get the Snowflake connection name from env or default."""
+    return os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
+
+
+@app.command("run")
+def run_pipeline(
+    use_case: str = typer.Argument(..., help="Natural language description of your use case"),
+    data: Optional[str] = typer.Option(None, "--data", "-d", help="Stage path to your data (e.g., @RAW.DATA_STAGE)"),
+    auto_approve: bool = typer.Option(False, "--auto-approve", "-y", help="Skip approval step"),
+    database: str = typer.Option("AGENTIC_PLATFORM", "--database", "-db", help="Target database"),
+    connection: Optional[str] = typer.Option(None, "--connection", "-c", help="Snowflake connection name"),
+):
+    """Run the agentic platform to build an AI application from your use case."""
+    conn_name = connection or get_connection_name()
+    os.environ["SNOWFLAKE_CONNECTION_NAME"] = conn_name
+
+    console.print(Panel.fit(
+        f"[bold blue]Snowflake Agentic Platform[/bold blue]\n"
+        f"Use Case: {use_case[:100]}...\n"
+        f"Database: {database}\n"
+        f"Connection: {conn_name}",
+        title="Starting Pipeline",
+    ))
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Parsing use case...", total=None)
+
+        try:
+            from src.meta_agent.graph import create_meta_agent_graph, MetaAgentState
+            
+            graph = create_meta_agent_graph()
+            
+            initial_state: MetaAgentState = {
+                "use_case_description": use_case,
+                "data_locations": [data] if data else [],
+                "data_assets": [],
+                "parsed_requirements": None,
+                "data_profile": None,
+                "available_agents": [],
+                "execution_plan": None,
+                "approval_status": "approved" if auto_approve else "pending",
+                "approval_feedback": None,
+                "current_phase": "start",
+                "error": None,
+                "messages": [],
+            }
+            
+            progress.update(task, description="Generating execution plan...")
+            result = graph.invoke(initial_state)
+            
+            plan_id = result.get("execution_plan", {}).get("plan_id", "N/A")
+            
+            console.print(f"\n[green]✓ Pipeline initiated![/green]")
+            console.print(f"Plan ID: [bold]{plan_id}[/bold]")
+            
+            if not auto_approve:
+                console.print("\n[yellow]Waiting for approval. Run:[/yellow]")
+                console.print(f"  agentic-platform approve {plan_id}")
+            
+        except ImportError:
+            console.print("[yellow]Meta-agent not fully implemented. Running in demo mode.[/yellow]")
+            import uuid
+            plan_id = str(uuid.uuid4())
+            console.print(f"\n[green]✓ Demo plan created![/green]")
+            console.print(f"Plan ID: [bold]{plan_id}[/bold]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            raise typer.Exit(1)
+
+
+@app.command("status")
+def check_status(
+    plan_id: str = typer.Argument(..., help="Execution plan ID"),
+    connection: Optional[str] = typer.Option(None, "--connection", "-c", help="Snowflake connection name"),
+):
+    """Check the status of an execution plan."""
+    conn_name = connection or get_connection_name()
+    
+    try:
+        import snowflake.connector
+        conn = snowflake.connector.connect(connection_name=conn_name)
+        cursor = conn.cursor()
+        
+        cursor.execute(f"""
+            SELECT status, approval_status, error_message, created_at, completed_at
+            FROM AGENTIC_PLATFORM.STATE.AGENT_EXECUTION_PLANS
+            WHERE plan_id = '{plan_id}'
+        """)
+        
+        row = cursor.fetchone()
+        
+        if row:
+            status, approval, error, created, completed = row
+            
+            table = Table(title=f"Plan Status: {plan_id[:8]}...")
+            table.add_column("Field", style="cyan")
+            table.add_column("Value", style="white")
+            
+            table.add_row("Status", status)
+            table.add_row("Approval", approval)
+            table.add_row("Created", str(created))
+            table.add_row("Completed", str(completed) if completed else "In Progress")
+            if error:
+                table.add_row("Error", error[:100])
+            
+            console.print(table)
+        else:
+            console.print(f"[yellow]Plan {plan_id} not found[/yellow]")
+            
+        cursor.close()
+        conn.close()
+        
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("approve")
+def approve_plan(
+    plan_id: str = typer.Argument(..., help="Execution plan ID to approve"),
+    connection: Optional[str] = typer.Option(None, "--connection", "-c", help="Snowflake connection name"),
+):
+    """Approve an execution plan to begin execution."""
+    conn_name = connection or get_connection_name()
+    
+    try:
+        import snowflake.connector
+        conn = snowflake.connector.connect(connection_name=conn_name)
+        cursor = conn.cursor()
+        
+        cursor.execute(f"""
+            UPDATE AGENTIC_PLATFORM.STATE.AGENT_EXECUTION_PLANS
+            SET approval_status = 'approved',
+                status = 'running',
+                approved_at = CURRENT_TIMESTAMP(),
+                approved_by = CURRENT_USER()
+            WHERE plan_id = '{plan_id}'
+            AND approval_status = 'pending'
+        """)
+        
+        if cursor.rowcount > 0:
+            console.print(f"[green]✓ Plan {plan_id[:8]}... approved![/green]")
+            console.print("Execution will begin shortly.")
+        else:
+            console.print(f"[yellow]Plan not found or already approved[/yellow]")
+            
+        cursor.close()
+        conn.close()
+        
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("agents")
+def list_agents(
+    connection: Optional[str] = typer.Option(None, "--connection", "-c", help="Snowflake connection name"),
+):
+    """List available agents in the registry."""
+    conn_name = connection or get_connection_name()
+    
+    agents = [
+        ("parquet_processor", "1.0.0", "preprocessing", "Process Parquet files from stage"),
+        ("document_chunker", "1.0.0", "preprocessing", "Extract and chunk documents (PDF, etc.)"),
+        ("ml_model_builder", "1.0.0", "ml", "Train and register ML models"),
+        ("feature_store_builder", "1.0.0", "ml", "Automated feature engineering"),
+        ("cortex_search_builder", "1.0.0", "cortex", "Create Cortex Search services"),
+        ("semantic_model_generator", "1.0.0", "cortex", "Generate semantic models for Analyst"),
+        ("app_code_generator", "1.0.0", "app", "Generate Streamlit/React applications"),
+        ("spcs_deployer", "1.0.0", "deployment", "Deploy to Snowpark Container Services"),
+        ("validation_agent", "1.0.0", "quality", "Data quality and validation checks"),
+        ("improvement_agent", "1.0.0", "maintenance", "Handle user improvement requests"),
+    ]
+    
+    table = Table(title="Available Agents")
+    table.add_column("Agent", style="cyan", no_wrap=True)
+    table.add_column("Version", style="white")
+    table.add_column("Category", style="green")
+    table.add_column("Description", style="white")
+    
+    for agent in agents:
+        table.add_row(*agent)
+    
+    console.print(table)
+
+
+@app.command("setup")
+def setup_database(
+    database: str = typer.Option("AGENTIC_PLATFORM", "--database", "-db", help="Database name"),
+    warehouse: str = typer.Option("COMPUTE_WH", "--warehouse", "-wh", help="Warehouse name"),
+    connection: Optional[str] = typer.Option(None, "--connection", "-c", help="Snowflake connection name"),
+):
+    """Set up the required database schemas and tables."""
+    conn_name = connection or get_connection_name()
+    
+    console.print(f"[bold]Setting up {database}...[/bold]")
+    
+    schemas = ["RAW", "CURATED", "ML", "DOCS", "ANALYTICS", "CORTEX", "ORCHESTRATOR", "STATE"]
+    
+    try:
+        import snowflake.connector
+        conn = snowflake.connector.connect(connection_name=conn_name)
+        cursor = conn.cursor()
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Creating database...", total=len(schemas) + 2)
+            
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS {database}")
+            progress.advance(task)
+            
+            cursor.execute(f"USE DATABASE {database}")
+            
+            for schema in schemas:
+                progress.update(task, description=f"Creating schema {schema}...")
+                cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+                progress.advance(task)
+            
+            progress.update(task, description="Creating state tables...")
+            
+            cursor.execute(f"USE SCHEMA STATE")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS AGENT_EXECUTION_PLANS (
+                    plan_id VARCHAR(36) DEFAULT UUID_STRING() PRIMARY KEY,
+                    use_case_description TEXT NOT NULL,
+                    parsed_requirements VARIANT,
+                    execution_plan VARIANT,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    approval_status VARCHAR(20) DEFAULT 'pending',
+                    approved_by VARCHAR(100),
+                    approved_at TIMESTAMP_NTZ,
+                    error_message TEXT,
+                    created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+                    updated_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+                    completed_at TIMESTAMP_NTZ
+                )
+            """)
+            progress.advance(task)
+        
+        cursor.close()
+        conn.close()
+        
+        console.print(f"[green]✓ Database {database} setup complete![/green]")
+        console.print(f"Schemas created: {', '.join(schemas)}")
+        
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("feature-store")
+def run_feature_store(
+    source_table: str = typer.Argument(..., help="Source table for feature engineering"),
+    target_column: Optional[str] = typer.Option(None, "--target", "-t", help="Target column for ML task"),
+    ml_task: Optional[str] = typer.Option(None, "--task", help="ML task type (classification, regression, etc.)"),
+    database: str = typer.Option("AGENTIC_PLATFORM", "--database", "-db", help="Database name"),
+    schema: str = typer.Option("ML", "--schema", "-s", help="Schema name"),
+    connection: Optional[str] = typer.Option(None, "--connection", "-c", help="Snowflake connection name"),
+):
+    """Run the feature store pipeline on a source table."""
+    conn_name = connection or get_connection_name()
+    os.environ["SNOWFLAKE_CONNECTION_NAME"] = conn_name
+    
+    console.print(f"[bold]Running Feature Store Pipeline[/bold]")
+    console.print(f"Source: {source_table}")
+    
+    try:
+        from src.agents.ml.feature_store_graph import run_feature_store_pipeline
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Processing...", total=None)
+            
+            result = run_feature_store_pipeline(
+                source_table=source_table,
+                database=database,
+                schema=schema,
+                target_column=target_column,
+                ml_task=ml_task,
+            )
+            
+            progress.update(task, description="Complete!")
+        
+        feature_table = result.get("feature_table")
+        engineered = len(result.get("engineered_features", []))
+        
+        console.print(f"\n[green]✓ Feature engineering complete![/green]")
+        console.print(f"Engineered {engineered} features")
+        if feature_table:
+            console.print(f"Feature table: {feature_table}")
+        
+        if result.get("errors"):
+            console.print(f"\n[yellow]Warnings:[/yellow]")
+            for err in result["errors"]:
+                console.print(f"  - {err}")
+                
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("search")
+def create_search_service(
+    source_table: str = typer.Argument(..., help="Source table with text data"),
+    service_name: str = typer.Argument(..., help="Name for the search service"),
+    search_column: Optional[str] = typer.Option(None, "--column", help="Column to search on"),
+    database: str = typer.Option("AGENTIC_PLATFORM", "--database", "-db", help="Database name"),
+    schema: str = typer.Option("CORTEX", "--schema", "-s", help="Schema name"),
+    connection: Optional[str] = typer.Option(None, "--connection", "-c", help="Snowflake connection name"),
+):
+    """Create a Cortex Search service from a table."""
+    conn_name = connection or get_connection_name()
+    os.environ["SNOWFLAKE_CONNECTION_NAME"] = conn_name
+    
+    console.print(f"[bold]Creating Cortex Search Service[/bold]")
+    console.print(f"Source: {source_table}")
+    console.print(f"Service: {service_name}")
+    
+    try:
+        from src.agents.search.search_graph import run_search_pipeline
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Creating search service...", total=None)
+            
+            result = run_search_pipeline(
+                source_table=source_table,
+                service_name=service_name,
+                database=database,
+                schema=schema,
+                search_column=search_column,
+            )
+            
+            progress.update(task, description="Complete!")
+        
+        service = result.get("search_service")
+        
+        if service:
+            console.print(f"\n[green]✓ Search service created![/green]")
+            console.print(f"Service: {service}")
+        else:
+            console.print(f"\n[yellow]Service creation may have failed[/yellow]")
+            
+        if result.get("errors"):
+            console.print(f"\n[red]Errors:[/red]")
+            for err in result["errors"]:
+                console.print(f"  - {err}")
+                
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("semantic")
+def create_semantic_model(
+    source_table: str = typer.Argument(..., help="Source table for semantic model"),
+    model_name: str = typer.Argument(..., help="Name for the semantic model"),
+    context: str = typer.Option("General analytics", "--context", help="Business context description"),
+    database: str = typer.Option("AGENTIC_PLATFORM", "--database", "-db", help="Database name"),
+    schema: str = typer.Option("ANALYTICS", "--schema", "-s", help="Schema name"),
+    connection: Optional[str] = typer.Option(None, "--connection", "-c", help="Snowflake connection name"),
+):
+    """Create a semantic model YAML from a table."""
+    conn_name = connection or get_connection_name()
+    os.environ["SNOWFLAKE_CONNECTION_NAME"] = conn_name
+    
+    console.print(f"[bold]Creating Semantic Model[/bold]")
+    console.print(f"Source: {source_table}")
+    console.print(f"Model: {model_name}")
+    
+    try:
+        from src.agents.semantic.semantic_graph import run_semantic_pipeline
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Generating semantic model...", total=None)
+            
+            result = run_semantic_pipeline(
+                source_table=source_table,
+                model_name=model_name,
+                database=database,
+                schema=schema,
+                business_context=context,
+            )
+            
+            progress.update(task, description="Complete!")
+        
+        yaml_content = result.get("yaml_content")
+        dims = len(result.get("dimensions", []))
+        facts = len(result.get("facts", []))
+        vqs = len(result.get("verified_queries", []))
+        
+        console.print(f"\n[green]✓ Semantic model generated![/green]")
+        console.print(f"Dimensions: {dims}, Facts: {facts}, Verified Queries: {vqs}")
+        
+        if yaml_content:
+            console.print(f"\n[bold]YAML Preview:[/bold]")
+            console.print(yaml_content[:500] + "...")
+            
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("improve")
+def run_improvement(
+    request: str = typer.Argument(..., help="Improvement request in natural language"),
+    plan_id: Optional[str] = typer.Option(None, "--plan", "-p", help="Plan ID to improve"),
+    connection: Optional[str] = typer.Option(None, "--connection", "-c", help="Snowflake connection name"),
+):
+    """Submit an improvement request for an existing application."""
+    conn_name = connection or get_connection_name()
+    os.environ["SNOWFLAKE_CONNECTION_NAME"] = conn_name
+    
+    import uuid
+    plan_id = plan_id or str(uuid.uuid4())
+    
+    console.print(f"[bold]Processing Improvement Request[/bold]")
+    console.print(f"Request: {request[:100]}...")
+    
+    try:
+        from src.agents.improvement.improvement_graph import run_improvement_pipeline
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Analyzing request...", total=None)
+            
+            result = run_improvement_pipeline(
+                request=request,
+                plan_id=plan_id,
+            )
+            
+            progress.update(task, description="Complete!")
+        
+        notification = result.get("notification", "")
+        request_type = result.get("request_type", "unknown")
+        
+        console.print(f"\n[green]✓ Improvement processed![/green]")
+        console.print(f"Type: {request_type}")
+        
+        if notification:
+            console.print(f"\n{notification}")
+            
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+if __name__ == "__main__":
+    app()

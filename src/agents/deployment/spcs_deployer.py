@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from src.config import get_settings
+
 
 class DeploymentState(str, Enum):
     BUILDING = "BUILDING"
@@ -41,14 +43,15 @@ class SPCSDeployer:
     def __init__(
         self,
         connection_name: Optional[str] = None,
-        database: str = "AGENTIC_PLATFORM",
-        schema: str = "ANALYTICS",
+        database: Optional[str] = None,
+        schema: Optional[str] = None,
         compute_pool: str = "AGENTIC_COMPUTE_POOL",
         image_repo: str = "APP_IMAGES",
     ):
-        self.connection_name = connection_name or os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
-        self.database = database
-        self.schema = schema
+        settings = get_settings()
+        self.connection_name = connection_name or settings.connection_name
+        self.database = database or settings.database
+        self.schema = schema or settings.analytics_schema
         self.compute_pool = compute_pool
         self.image_repo = image_repo
         self._session = None

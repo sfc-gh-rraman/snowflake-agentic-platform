@@ -1,0 +1,21 @@
+{
+  "spec": {
+    "containers": [
+      {
+        "name": "drilling-operations-dashboard",
+        "image": "/AGENTIC_PLATFORM/ANALYTICS/APP_IMAGES/drilling_operations_dashboard:latest",
+        "env": {
+          "SNOWFLAKE_ACCOUNT": "{{ context().CURRENT_ACCOUNT }}",
+          "SNOWFLAKE_HOST": "{{ context().CURRENT_HOST }}"
+        }
+      }
+    ],
+    "endpoints": [
+      {
+        "name": "app",
+        "port": 8080,
+        "public": true
+      }
+    ]
+  }
+}

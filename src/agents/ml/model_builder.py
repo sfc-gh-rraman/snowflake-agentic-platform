@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from src.config import get_settings
+
 
 class MLModelBuilderState(str, Enum):
     TASK_CLASSIFICATION = "TASK_CLASSIFICATION"
@@ -47,12 +49,13 @@ class MLModelBuilder:
     def __init__(
         self,
         connection_name: Optional[str] = None,
-        database: str = "AGENTIC_PLATFORM",
-        schema: str = "ML",
+        database: Optional[str] = None,
+        schema: Optional[str] = None,
     ):
-        self.connection_name = connection_name or os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
-        self.database = database
-        self.schema = schema
+        settings = get_settings()
+        self.connection_name = connection_name or settings.connection_name
+        self.database = database or settings.database
+        self.schema = schema or settings.ml_schema
         self._session = None
         self._state = MLModelBuilderState.TASK_CLASSIFICATION
 

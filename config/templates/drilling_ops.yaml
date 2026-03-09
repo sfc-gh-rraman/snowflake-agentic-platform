@@ -1,0 +1,397 @@
+# Drilling Operations Intelligence - Use Case Configuration
+# This is the reference template based on the PETRA drilling co-pilot
+# Copy and modify for your own use case
+
+version: "1.0"
+
+# =============================================================================
+# DOMAIN CONTEXT
+# =============================================================================
+domain:
+  name: "Drilling Operations Intelligence"
+  industry: "oil_gas"
+  description: |
+    An intelligent co-pilot that watches drilling operations, remembers everything
+    that ever happened across 8 wells, proactively warns about potential issues
+    like stuck pipe, explains why based on historical incidents, and suggests
+    optimal drilling parameters based on offset well analysis.
+
+# =============================================================================
+# TARGET PERSONAS
+# Who uses this system and what do they need?
+# =============================================================================
+personas:
+  - role: "Driller / Toolpusher"
+    department: "Operations"
+    needs:
+      - "Real-time parameter monitoring with anomaly alerts"
+      - "What should I do about this torque spike?"
+      - "What happened last time at this depth?"
+    primary_page: "Command Center"
+
+  - role: "Drilling Engineer"
+    department: "Engineering"
+    needs:
+      - "How can I drill this section faster?"
+      - "What parameters worked best for offset wells?"
+      - "Generate the daily drilling report"
+    primary_page: "Fleet Overview"
+
+  - role: "Drilling Superintendent"
+    department: "Management"
+    needs:
+      - "How is my fleet performing?"
+      - "What lessons have we learned?"
+      - "Brief me for the morning meeting"
+    primary_page: "Toolbox Talk"
+
+# =============================================================================
+# SNOWFLAKE CONFIGURATION
+# =============================================================================
+snowflake:
+  database: "DRILLING_OPS_DB"
+  raw_schema: "RAW"
+  curated_schema: "CURATED"
+  ml_schema: "ML"
+  docs_schema: "DOCS"
+  analytics_schema: "ANALYTICS"
+  cortex_schema: "CORTEX"
+  orchestrator_schema: "ORCHESTRATOR"
+
+# =============================================================================
+# DATA ASSETS
+# =============================================================================
+data:
+  structured:
+    - name: "drilling_time"
+      location: "CURATED.DRILLING_TIME"
+      data_type: "time_series"
+      volume: "12.5M rows"
+      key_columns:
+        - "WELL_NAME"
+        - "TIMESTAMP"
+      time_column: "TIMESTAMP"
+      entity_column: "WELL_NAME"
+      measures:
+        - "ROP_M_HR"
+        - "WOB_KKGF"
+        - "RPM"
+        - "TORQUE_KNM"
+        - "SPP_KPA"
+        - "HOOKLOAD_KKGF"
+        - "MUD_FLOW_IN_LPM"
+      dimensions:
+        - "WELL_NAME"
+      label_column: "STUCK_PIPE_FLAG"
+
+    - name: "drilling_depth"
+      location: "CURATED.DRILLING_DEPTH"
+      data_type: "survey"
+      volume: "737K rows"
+      key_columns:
+        - "WELL_NAME"
+        - "MEASURED_DEPTH_M"
+      entity_column: "WELL_NAME"
+      measures:
+        - "MEASURED_DEPTH_M"
+        - "TVD_M"
+        - "INCLINATION_DEG"
+        - "AZIMUTH_DEG"
+        - "D_EXPONENT"
+
+  unstructured:
+    - name: "daily_drilling_reports"
+      location: "@RAW.DOCUMENTS_STAGE/*.pdf"
+      doc_type: "pdf"
+      count: 1759
+      content_description: "Daily drilling reports with hourly operational narratives, incidents, lessons learned"
+      chunk_size: 512
+      chunk_overlap: 50
+
+# =============================================================================
+# MULTI-AGENT ARCHITECTURE
+# =============================================================================
+agents:
+  - name: "Watchdog"
+    agent_type: "watchdog"
+    purpose: "Continuous real-time monitoring and proactive alerting"
+    capabilities:
+      - "Monitor current depth vs plan"
+      - "Detect parameter anomalies (torque, SPP, ROP trends)"
+      - "Pattern match against historical incidents"
+      - "Generate proactive warnings before problems occur"
+    tools:
+      - "sql_query"
+      - "model_inference"
+    alerts_on:
+      - "torque_spike"
+      - "pressure_anomaly"
+      - "rop_deviation"
+      - "stuck_pipe_risk"
+
+  - name: "Historian"
+    agent_type: "historian"
+    purpose: "Institutional memory and knowledge retrieval"
+    capabilities:
+      - "Search 1,759 daily drilling reports"
+      - "Find similar historical incidents"
+      - "Retrieve lessons learned"
+    tools:
+      - "cortex_search"
+      - "sql_query"
+    sources:
+      - "daily_drilling_reports"
+      - "drilling_time"
+
+  - name: "Advisor"
+    agent_type: "advisor"
+    purpose: "Decision support with explainable recommendations"
+    capabilities:
+      - "Parameter recommendations based on offset wells"
+      - "Risk assessment for current operation"
+      - "Step-by-step procedures with context"
+      - "What-if scenario analysis"
+    tools:
+      - "cortex_analyst"
+      - "sql_query"
+      - "model_inference"
+    sources:
+      - "drilling_time"
+      - "drilling_depth"
+
+  - name: "Orchestrator"
+    agent_type: "orchestrator"
+    purpose: "Coordinate multi-agent responses to user queries"
+    capabilities:
+      - "Route queries to appropriate specialist agent"
+      - "Combine insights from multiple agents"
+      - "Maintain conversation context"
+    tools:
+      - "cortex_search"
+      - "cortex_analyst"
+      - "model_inference"
+
+# =============================================================================
+# ML MODELS
+# =============================================================================
+ml_models:
+  - name: "stuck_pipe_predictor"
+    task: "binary_classification"
+    target: "STUCK_PIPE_FLAG"
+    features:
+      - "ROP_M_HR"
+      - "WOB_KKGF"
+      - "RPM"
+      - "TORQUE_KNM"
+      - "SPP_KPA"
+      - "HOOKLOAD_KKGF"
+    source_table: "CURATED.DRILLING_TIME"
+    business_value: "Avoid $500K-2M per stuck pipe incident"
+    threshold: 0.7
+
+  - name: "rop_optimizer"
+    task: "regression"
+    target: "ROP_M_HR"
+    features:
+      - "WOB_KKGF"
+      - "RPM"
+      - "TORQUE_KNM"
+      - "MUD_FLOW_IN_LPM"
+      - "HOLE_DEPTH_MD_M"
+    source_table: "CURATED.DRILLING_TIME"
+    business_value: "15% ROP improvement = days saved per well"
+
+  - name: "kick_detector"
+    task: "binary_classification"
+    target: "KICK_FLAG"
+    features:
+      - "MUD_FLOW_IN_LPM"
+      - "MUD_DENSITY_IN"
+      - "MUD_DENSITY_OUT"
+      - "SPP_KPA"
+    source_table: "CURATED.DRILLING_TIME"
+    business_value: "Safety critical - prevent blowouts"
+    threshold: 0.5
+
+# =============================================================================
+# CORTEX SERVICES
+# =============================================================================
+cortex_services:
+  search:
+    - name: "DDR_SEARCH_SERVICE"
+      source: "daily_drilling_reports"
+      embedding_model: "e5-base-v2"
+      columns_to_return:
+        - "well_name"
+        - "report_date"
+        - "chunk_text"
+        - "section"
+
+  analyst:
+    - name: "DRILLING_ANALYST"
+      tables:
+        - "DRILLING_TIME"
+        - "DRILLING_DEPTH"
+        - "MODEL_METRICS"
+        - "FEATURE_IMPORTANCE"
+
+  agents:
+    - name: "DRILLING_COPILOT"
+      tools:
+        - "DDR_SEARCH_SERVICE"
+        - "DRILLING_ANALYST"
+        - "stuck_pipe_predictor"
+
+# =============================================================================
+# APPLICATION SPECIFICATION
+# =============================================================================
+app:
+  name: "PETRA - Drilling Co-Pilot"
+  description: "Predictive Engineering & Technical Response Assistant"
+
+  pages:
+    - name: "Command Center"
+      route: "/"
+      layout: "command_center"
+      description: "Real-time drilling operations monitoring with chat"
+      components:
+        - component_type: "live_gauges"
+          title: "Live Parameters"
+          metrics:
+            - "rop"
+            - "wob"
+            - "rpm"
+            - "torque"
+            - "spp"
+            - "hookload"
+          refresh_ms: 2000
+
+        - component_type: "alert_feed"
+          title: "Active Alerts"
+          source: "watchdog_agent"
+
+        - component_type: "chat"
+          title: "Co-Pilot Chat"
+          source: "orchestrator_agent"
+
+        - component_type: "context_panel"
+          title: "Context"
+          config:
+            dynamic: true
+
+      primary_for:
+        - "Driller / Toolpusher"
+
+    - name: "Fleet Overview"
+      route: "/fleet"
+      layout: "fleet_overview"
+      description: "Multi-well performance comparison"
+      components:
+        - component_type: "kpi_cards"
+          metrics:
+            - "total_wells"
+            - "total_depth"
+            - "avg_rop"
+            - "total_readings"
+
+        - component_type: "days_vs_depth"
+          title: "Days vs Depth"
+          config:
+            wells: "all"
+            y_reversed: true
+
+        - component_type: "parameter_comparison"
+          title: "Parameter vs Depth"
+          metrics:
+            - "rop"
+            - "wob"
+            - "rpm"
+            - "torque"
+
+        - component_type: "statistics_table"
+          title: "Well Statistics"
+
+      primary_for:
+        - "Drilling Engineer"
+
+    - name: "Knowledge Base"
+      route: "/search"
+      layout: "knowledge_base"
+      description: "Semantic search across drilling reports"
+      components:
+        - component_type: "document_search"
+          title: "DDR Search"
+          source: "DDR_SEARCH_SERVICE"
+          config:
+            highlight_matches: true
+            result_display: "card"
+
+      primary_for:
+        - "Drilling Engineer"
+        - "Drilling Superintendent"
+
+    - name: "Toolbox Talk"
+      route: "/briefing"
+      layout: "single_column"
+      description: "AI-generated shift briefings"
+      components:
+        - component_type: "ai_briefing"
+          title: "Daily Briefing"
+          config:
+            template: "toolbox_talk"
+            sources:
+              - "recent_incidents"
+              - "current_conditions"
+              - "lessons_learned"
+
+      primary_for:
+        - "Drilling Superintendent"
+
+  api_endpoints:
+    - path: "/api/chat"
+      method: "POST"
+      handler: "cortex_agent"
+
+    - path: "/api/fleet/summary"
+      method: "GET"
+      handler: "sql_query"
+
+    - path: "/api/fleet/days-vs-depth"
+      method: "GET"
+      handler: "sql_query"
+
+    - path: "/api/fleet/well/{well_id}/timeseries"
+      method: "GET"
+      handler: "sql_query"
+
+    - path: "/api/search"
+      method: "POST"
+      handler: "cortex_search"
+
+    - path: "/api/predict/stuck_pipe"
+      method: "POST"
+      handler: "model_inference"
+
+    - path: "/api/briefing/generate"
+      method: "POST"
+      handler: "cortex_llm"
+
+  real_time:
+    enabled: true
+    websocket: true
+    refresh_interval_ms: 2000
+    parameters:
+      - "rop"
+      - "wob"
+      - "rpm"
+      - "torque"
+      - "spp"
+      - "depth"
+
+  deployment:
+    target: "spcs"
+    compute_pool: "PETRA_COMPUTE_POOL"
+    warehouse: "COMPUTE_WH"
+    auth: "oauth"
+    min_instances: 1
+    max_instances: 1

@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from src.config import get_settings
+
 
 class DocumentChunkerState(str, Enum):
     EXTRACT = "EXTRACT"
@@ -57,15 +59,16 @@ class DocumentChunker:
     def __init__(
         self,
         connection_name: Optional[str] = None,
-        database: str = "AGENTIC_PLATFORM",
-        schema: str = "RAW",
+        database: Optional[str] = None,
+        schema: Optional[str] = None,
         chunk_table: str = "DOCUMENT_CHUNKS",
         max_chunk_size: int = 8000,
         chunk_overlap: int = 200,
     ):
-        self.connection_name = connection_name or os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
-        self.database = database
-        self.schema = schema
+        settings = get_settings()
+        self.connection_name = connection_name or settings.connection_name
+        self.database = database or settings.database
+        self.schema = schema or settings.docs_schema
         self.chunk_table = chunk_table
         self.max_chunk_size = max_chunk_size
         self.chunk_overlap = chunk_overlap
@@ -288,7 +291,7 @@ class DocumentChunker:
             insert_sql = f"""
                 INSERT INTO {full_table} 
                 (chunk_id, source_file, document_type, page_number, section_header, chunk, chunk_index, metadata)
-                VALUES (
+                SELECT 
                     '{chunk.chunk_id}',
                     '{escaped_file}',
                     '{chunk.document_type}',
@@ -297,12 +300,12 @@ class DocumentChunker:
                     '{escaped_text[:16000]}',
                     {chunk.chunk_index},
                     PARSE_JSON('{metadata_json}')
-                )
             """
             try:
                 self._execute(insert_sql)
                 loaded += 1
-            except Exception:
+            except Exception as e:
+                print(f"Insert error: {e}")
                 pass
 
         return loaded

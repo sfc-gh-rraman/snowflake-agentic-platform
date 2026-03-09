@@ -1,0 +1,181 @@
+name: Deploy to Production
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  REGISTRY: ${{ secrets.SNOWFLAKE_REGISTRY }}
+  IMAGE_NAME: snowflake-agentic-platform
+
+jobs:
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Validate version format
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          if [[ ! $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version format: $VERSION"
+            exit 1
+          fi
+
+  test:
+    name: Run Full Test Suite
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: snowflake-staging
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,observability]"
+          
+      - name: Configure Snowflake connection
+        run: |
+          mkdir -p ~/.snowflake
+          cat > ~/.snowflake/connections.toml << EOF
+          [default]
+          account = "${{ secrets.SNOWFLAKE_ACCOUNT }}"
+          user = "${{ secrets.SNOWFLAKE_USER }}"
+          password = "${{ secrets.SNOWFLAKE_PASSWORD }}"
+          warehouse = "${{ secrets.SNOWFLAKE_WAREHOUSE }}"
+          database = "AGENTIC_PLATFORM_STAGING"
+          schema = "PUBLIC"
+          EOF
+          
+      - name: Run all tests
+        run: |
+          pytest tests/ -v --ignore=tests/e2e
+          python tests/e2e/run_all.py
+        env:
+          SNOWFLAKE_CONNECTION_NAME: default
+
+  build-and-deploy:
+    name: Build & Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [validate, test]
+    environment: snowflake-prod
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Install Snowflake CLI
+        run: pip install snowflake-cli-labs
+        
+      - name: Configure Snowflake connection
+        run: |
+          mkdir -p ~/.snowflake
+          cat > ~/.snowflake/connections.toml << EOF
+          [default]
+          account = "${{ secrets.SNOWFLAKE_ACCOUNT }}"
+          user = "${{ secrets.SNOWFLAKE_USER }}"
+          password = "${{ secrets.SNOWFLAKE_PASSWORD }}"
+          warehouse = "${{ secrets.SNOWFLAKE_WAREHOUSE }}"
+          database = "AGENTIC_PLATFORM"
+          schema = "PUBLIC"
+          role = "${{ secrets.SNOWFLAKE_ROLE }}"
+          EOF
+          
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Login to Snowflake Image Registry
+        run: snow spcs image-registry login
+          
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }} \
+            -t ${{ env.IMAGE_NAME }}:latest \
+            -f deployment/Dockerfile \
+            .
+            
+      - name: Tag and push to Snowflake registry
+        run: |
+          docker tag ${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }} ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }}
+          docker tag ${{ env.IMAGE_NAME }}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          
+      - name: Deploy SPCS service
+        run: |
+          snow sql -q "
+            CREATE OR REPLACE SERVICE AGENTIC_PLATFORM.PUBLIC.AGENTIC_PLATFORM_SERVICE
+            IN COMPUTE POOL AGENTIC_COMPUTE_POOL_PROD
+            FROM SPECIFICATION \$\$
+            spec:
+              containers:
+              - name: app
+                image: /${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }}
+                env:
+                  SNOWFLAKE_DATABASE: AGENTIC_PLATFORM
+                  ENVIRONMENT: production
+                resources:
+                  requests:
+                    memory: 2Gi
+                    cpu: 1
+                  limits:
+                    memory: 4Gi
+                    cpu: 2
+              endpoints:
+              - name: app
+                port: 8000
+                public: true
+            \$\$
+            MIN_INSTANCES = 2
+            MAX_INSTANCES = 5;
+          "
+          
+      - name: Verify deployment
+        run: |
+          sleep 30
+          snow sql -q "SELECT SYSTEM\$GET_SERVICE_STATUS('AGENTIC_PLATFORM.PUBLIC.AGENTIC_PLATFORM_SERVICE')"
+          
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate.outputs.version }}
+          name: Release ${{ needs.validate.outputs.version }}
+          body: |
+            ## Snowflake Agentic Platform ${{ needs.validate.outputs.version }}
+            
+            Deployed to production SPCS.
+            
+            ### Changes
+            See [CHANGELOG.md](CHANGELOG.md) for details.
+          draft: false
+          prerelease: false

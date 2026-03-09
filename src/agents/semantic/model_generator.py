@@ -107,12 +107,17 @@ class SemanticModelGenerator:
 
     def _get_table_info(self, table_name: str) -> Dict[str, Any]:
         parts = table_name.split('.')
-        table = parts[-1]
+        if len(parts) >= 3:
+            db, schema, table = parts[0], parts[1], parts[-1]
+        elif len(parts) == 2:
+            db, schema, table = self.database, parts[0], parts[1]
+        else:
+            db, schema, table = self.database, self.schema, parts[0]
 
         col_sql = f"""
             SELECT COLUMN_NAME, DATA_TYPE
-            FROM {'.'.join(parts[:-1]) if len(parts) > 1 else parts[0]}.INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_NAME = '{table}'
+            FROM {db}.INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = '{schema}' AND TABLE_NAME = '{table}'
         """
         columns = self._execute_query(col_sql)
 

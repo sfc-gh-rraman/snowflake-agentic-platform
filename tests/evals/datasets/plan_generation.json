@@ -1,0 +1,132 @@
+[
+  {
+    "input": {
+      "use_case": "I have sensor data from manufacturing equipment and daily maintenance reports. I need to predict equipment failures.",
+      "detected_domain": "manufacturing_predictive_maintenance",
+      "data_paths": ["@RAW.DATA_STAGE/sensors/*.parquet", "@RAW.DOCUMENTS_STAGE/reports/*.pdf"]
+    },
+    "expected_phases": [
+      {
+        "phase_name": "data_ingestion",
+        "agents": ["parquet_processor", "document_chunker"],
+        "parallel": true
+      },
+      {
+        "phase_name": "search_service_creation",
+        "agents": ["search_service_creator"],
+        "depends_on": ["data_ingestion"]
+      },
+      {
+        "phase_name": "ml_model_training",
+        "agents": ["model_builder"],
+        "depends_on": ["data_ingestion"]
+      }
+    ],
+    "validation_criteria": {
+      "min_phases": 3,
+      "required_agents": ["parquet_processor", "model_builder"],
+      "parallel_ingestion": true
+    }
+  },
+  {
+    "input": {
+      "use_case": "Build a document search system for legal contracts with automatic clause extraction.",
+      "detected_domain": "legal_document_processing",
+      "data_paths": ["@RAW.DOCUMENTS_STAGE/contracts/*.pdf"]
+    },
+    "expected_phases": [
+      {
+        "phase_name": "document_processing",
+        "agents": ["document_chunker"],
+        "parallel": false
+      },
+      {
+        "phase_name": "search_service_creation",
+        "agents": ["search_service_creator"],
+        "depends_on": ["document_processing"]
+      }
+    ],
+    "validation_criteria": {
+      "min_phases": 2,
+      "required_agents": ["document_chunker", "search_service_creator"],
+      "must_have_dependency": true
+    }
+  },
+  {
+    "input": {
+      "use_case": "Analyze customer transactions to detect fraud patterns and build a risk scoring model.",
+      "detected_domain": "financial_fraud_detection",
+      "data_paths": ["@RAW.DATA_STAGE/transactions.parquet"]
+    },
+    "expected_phases": [
+      {
+        "phase_name": "data_ingestion",
+        "agents": ["parquet_processor"],
+        "parallel": false
+      },
+      {
+        "phase_name": "ml_model_training",
+        "agents": ["model_builder"],
+        "depends_on": ["data_ingestion"]
+      }
+    ],
+    "validation_criteria": {
+      "min_phases": 2,
+      "required_agents": ["parquet_processor", "model_builder"],
+      "ml_after_ingestion": true
+    }
+  },
+  {
+    "input": {
+      "use_case": "Create an analytics dashboard with natural language queries for sales data.",
+      "detected_domain": "business_analytics",
+      "data_paths": ["@RAW.DATA_STAGE/sales.parquet"]
+    },
+    "expected_phases": [
+      {
+        "phase_name": "data_ingestion",
+        "agents": ["parquet_processor"],
+        "parallel": false
+      },
+      {
+        "phase_name": "semantic_model_creation",
+        "agents": ["semantic_model_generator"],
+        "depends_on": ["data_ingestion"]
+      },
+      {
+        "phase_name": "app_generation",
+        "agents": ["app_code_generator"],
+        "depends_on": ["semantic_model_creation"]
+      }
+    ],
+    "validation_criteria": {
+      "min_phases": 3,
+      "required_agents": ["parquet_processor", "semantic_model_generator", "app_code_generator"],
+      "app_last": true
+    }
+  },
+  {
+    "input": {
+      "use_case": "Process support tickets and build a knowledge base for automated FAQ responses.",
+      "detected_domain": "customer_support_automation",
+      "data_paths": ["@RAW.DOCUMENTS_STAGE/tickets/*.json"]
+    },
+    "expected_phases": [
+      {
+        "phase_name": "document_processing",
+        "agents": ["document_chunker"],
+        "parallel": false
+      },
+      {
+        "phase_name": "search_service_creation",
+        "agents": ["search_service_creator"],
+        "depends_on": ["document_processing"]
+      }
+    ],
+    "validation_criteria": {
+      "min_phases": 2,
+      "required_agents": ["document_chunker", "search_service_creator"],
+      "has_rag_capability": true
+    }
+  }
+]

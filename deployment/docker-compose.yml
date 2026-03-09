@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - SNOWFLAKE_CONNECTION_NAME=${SNOWFLAKE_CONNECTION_NAME:-default}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+    volumes:
+      - ~/.snowflake:/root/.snowflake:ro
+    command: serve
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    environment:
+      - SNOWFLAKE_CONNECTION_NAME=${SNOWFLAKE_CONNECTION_NAME:-default}
+    volumes:
+      - ~/.snowflake:/root/.snowflake:ro
+    command: worker
+    depends_on:
+      - app

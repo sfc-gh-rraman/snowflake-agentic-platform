@@ -1,0 +1,90 @@
+name: Deploy to DEV
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+  REGISTRY: ${{ secrets.SNOWFLAKE_REGISTRY }}
+  IMAGE_NAME: snowflake-agentic-platform
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy to DEV
+    runs-on: ubuntu-latest
+    environment: snowflake-dev
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Install Snowflake CLI
+        run: pip install snowflake-cli-labs
+        
+      - name: Configure Snowflake connection
+        run: |
+          mkdir -p ~/.snowflake
+          cat > ~/.snowflake/connections.toml << EOF
+          [default]
+          account = "${{ secrets.SNOWFLAKE_ACCOUNT }}"
+          user = "${{ secrets.SNOWFLAKE_USER }}"
+          password = "${{ secrets.SNOWFLAKE_PASSWORD }}"
+          warehouse = "${{ secrets.SNOWFLAKE_WAREHOUSE }}"
+          database = "AGENTIC_PLATFORM_DEV"
+          schema = "PUBLIC"
+          role = "${{ secrets.SNOWFLAKE_ROLE }}"
+          EOF
+          
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Login to Snowflake Image Registry
+        run: |
+          snow spcs image-registry login
+          
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            -t ${{ env.IMAGE_NAME }}:dev-latest \
+            -f deployment/Dockerfile \
+            .
+            
+      - name: Tag and push to Snowflake registry
+        run: |
+          docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker tag ${{ env.IMAGE_NAME }}:dev-latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-latest
+          
+      - name: Deploy SPCS service
+        run: |
+          snow sql -q "
+            CREATE SERVICE IF NOT EXISTS AGENTIC_PLATFORM_DEV.PUBLIC.AGENTIC_PLATFORM_SERVICE
+            IN COMPUTE POOL AGENTIC_COMPUTE_POOL
+            FROM SPECIFICATION \$\$
+            spec:
+              containers:
+              - name: app
+                image: /${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-latest
+                env:
+                  SNOWFLAKE_DATABASE: AGENTIC_PLATFORM_DEV
+                  ENVIRONMENT: dev
+              endpoints:
+              - name: app
+                port: 8000
+                public: true
+            \$\$
+            MIN_INSTANCES = 1
+            MAX_INSTANCES = 2;
+          "
+          
+      - name: Get service status
+        run: |
+          snow sql -q "CALL SYSTEM\$GET_SERVICE_STATUS('AGENTIC_PLATFORM_DEV.PUBLIC.AGENTIC_PLATFORM_SERVICE')"

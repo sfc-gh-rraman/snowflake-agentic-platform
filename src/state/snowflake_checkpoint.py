@@ -16,6 +16,8 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 
+from src.config import get_settings
+
 
 class SnowflakeCheckpointSaver(BaseCheckpointSaver):
     """Checkpoint saver that persists to Snowflake LANGGRAPH_CHECKPOINTS table."""
@@ -23,14 +25,15 @@ class SnowflakeCheckpointSaver(BaseCheckpointSaver):
     def __init__(
         self,
         connection_name: Optional[str] = None,
-        database: str = "AGENTIC_PLATFORM",
-        schema: str = "STATE",
+        database: Optional[str] = None,
+        schema: Optional[str] = None,
         table: str = "LANGGRAPH_CHECKPOINTS",
     ):
         super().__init__()
-        self.connection_name = connection_name or os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
-        self.database = database
-        self.schema = schema
+        settings = get_settings()
+        self.connection_name = connection_name or settings.connection_name
+        self.database = database or settings.database
+        self.schema = schema or settings.orchestrator_schema
         self.table = table
         self._session = None
 

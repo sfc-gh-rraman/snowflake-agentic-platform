@@ -1,0 +1,96 @@
+[
+  {
+    "input": {
+      "use_case": "Sales analytics dashboard",
+      "app_name": "SalesExplorer",
+      "tables": ["AGENTIC_PLATFORM.CURATED.SALES", "AGENTIC_PLATFORM.CURATED.PRODUCTS"],
+      "features": ["data_table", "charts", "filters"]
+    },
+    "expected_files": {
+      "frontend": ["App.tsx", "pages/Dashboard.tsx"],
+      "backend": ["main.py", "routes/data.py"],
+      "deployment": ["Dockerfile", "requirements.txt"]
+    },
+    "validation_criteria": {
+      "react_imports": ["react", "@mui/material"],
+      "fastapi_imports": ["fastapi", "snowflake.connector"],
+      "has_data_fetching": true,
+      "has_error_handling": true
+    }
+  },
+  {
+    "input": {
+      "use_case": "Document search with RAG",
+      "app_name": "DocSearch",
+      "tables": ["AGENTIC_PLATFORM.DOCS.DOCUMENT_CHUNKS"],
+      "search_services": ["DOC_SEARCH_SERVICE"],
+      "features": ["search_box", "results_list", "chat"]
+    },
+    "expected_files": {
+      "frontend": ["App.tsx", "pages/Search.tsx", "pages/Chat.tsx"],
+      "backend": ["main.py", "routes/search.py"],
+      "deployment": ["Dockerfile", "requirements.txt"]
+    },
+    "validation_criteria": {
+      "has_cortex_search_call": true,
+      "has_streaming_response": true,
+      "has_search_interface": true
+    }
+  },
+  {
+    "input": {
+      "use_case": "ML predictions dashboard",
+      "app_name": "PredictiveInsights",
+      "tables": ["AGENTIC_PLATFORM.CURATED.SENSOR_DATA"],
+      "models": ["AGENTIC_PLATFORM.ML.FAILURE_PREDICTOR"],
+      "features": ["data_table", "prediction_form", "charts"]
+    },
+    "expected_files": {
+      "frontend": ["App.tsx", "pages/Dashboard.tsx", "pages/Predict.tsx"],
+      "backend": ["main.py", "routes/data.py", "routes/ml.py"],
+      "deployment": ["Dockerfile", "requirements.txt"]
+    },
+    "validation_criteria": {
+      "has_model_inference_call": true,
+      "has_prediction_form": true,
+      "has_visualization": true
+    }
+  },
+  {
+    "input": {
+      "use_case": "Natural language data analytics",
+      "app_name": "DataAnalyst",
+      "tables": ["AGENTIC_PLATFORM.CURATED.TRANSACTIONS"],
+      "semantic_models": ["TRANSACTION_SEMANTIC_MODEL"],
+      "features": ["nl_query", "results_table", "charts"]
+    },
+    "expected_files": {
+      "frontend": ["App.tsx", "pages/Query.tsx"],
+      "backend": ["main.py", "routes/analyst.py"],
+      "deployment": ["Dockerfile", "requirements.txt"]
+    },
+    "validation_criteria": {
+      "has_cortex_analyst_call": true,
+      "has_nl_input": true,
+      "has_sql_display": true
+    }
+  },
+  {
+    "input": {
+      "use_case": "Customer insights portal",
+      "app_name": "CustomerPortal",
+      "tables": ["AGENTIC_PLATFORM.CURATED.CUSTOMERS", "AGENTIC_PLATFORM.CURATED.ORDERS"],
+      "features": ["data_table", "filters", "export"]
+    },
+    "expected_files": {
+      "frontend": ["App.tsx", "pages/Customers.tsx", "pages/Orders.tsx"],
+      "backend": ["main.py", "routes/data.py"],
+      "deployment": ["Dockerfile", "requirements.txt", "spcs_service.yaml"]
+    },
+    "validation_criteria": {
+      "has_pagination": true,
+      "has_filtering": true,
+      "has_spcs_config": true
+    }
+  }
+]

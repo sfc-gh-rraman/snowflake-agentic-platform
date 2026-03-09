@@ -3,6 +3,8 @@
 import os
 from typing import Any, Dict, List, Optional
 
+from src.config import get_settings
+
 
 class CortexSearchBuilder:
     """Build Cortex Search services from document chunks."""
@@ -10,14 +12,15 @@ class CortexSearchBuilder:
     def __init__(
         self,
         connection_name: Optional[str] = None,
-        database: str = "AGENTIC_PLATFORM",
-        schema: str = "ANALYTICS",
-        warehouse: str = "COMPUTE_WH",
+        database: Optional[str] = None,
+        schema: Optional[str] = None,
+        warehouse: Optional[str] = None,
     ):
-        self.connection_name = connection_name or os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
-        self.database = database
-        self.schema = schema
-        self.warehouse = warehouse
+        settings = get_settings()
+        self.connection_name = connection_name or settings.connection_name
+        self.database = database or settings.database
+        self.schema = schema or settings.cortex_schema
+        self.warehouse = warehouse or settings.warehouse
         self._session = None
 
     @property

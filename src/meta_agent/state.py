@@ -189,3 +189,7 @@ class MetaAgentState(TypedDict):
     current_phase: str
     error: Optional[str]
     messages: List[Dict[str, Any]]
+    
+    use_case_config: Optional[Dict[str, Any]]
+    generated_ddls: Optional[str]
+    generated_app: Optional[str]

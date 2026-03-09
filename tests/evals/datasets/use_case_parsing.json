@@ -1,0 +1,72 @@
+[
+  {
+    "input": "I have sensor data from manufacturing equipment and daily maintenance reports. I need to predict equipment failures and search historical incidents.",
+    "expected_domain": "manufacturing_predictive_maintenance",
+    "expected_data_types": ["parquet", "pdf"],
+    "expected_capabilities": ["ml_prediction", "cortex_search"],
+    "reasoning": "Sensor data implies time-series parquet, maintenance reports are documents, failure prediction needs ML, historical search needs Cortex Search"
+  },
+  {
+    "input": "Analyze customer transactions to detect fraud patterns and build a risk scoring model.",
+    "expected_domain": "financial_fraud_detection",
+    "expected_data_types": ["parquet"],
+    "expected_capabilities": ["ml_prediction", "anomaly_detection"],
+    "reasoning": "Transaction data is structured (parquet), fraud detection requires anomaly ML, risk scoring is classification"
+  },
+  {
+    "input": "Process support tickets and build a knowledge base for automated FAQ responses.",
+    "expected_domain": "customer_support_automation",
+    "expected_data_types": ["text", "json"],
+    "expected_capabilities": ["cortex_search", "rag"],
+    "reasoning": "Support tickets are text/JSON, FAQ responses need semantic search and RAG"
+  },
+  {
+    "input": "I have sales data in CSV files and want to create an analytics dashboard with natural language queries.",
+    "expected_domain": "business_analytics",
+    "expected_data_types": ["csv", "parquet"],
+    "expected_capabilities": ["cortex_analyst", "app_generation"],
+    "reasoning": "Sales analytics needs semantic model for NL queries and dashboard app generation"
+  },
+  {
+    "input": "Build a document search system for legal contracts with automatic clause extraction.",
+    "expected_domain": "legal_document_processing",
+    "expected_data_types": ["pdf", "docx"],
+    "expected_capabilities": ["cortex_search", "document_chunking", "extraction"],
+    "reasoning": "Legal docs are PDFs/DOCX, clause extraction needs chunking, search needs Cortex Search"
+  },
+  {
+    "input": "Create a recommendation engine for products based on user behavior data.",
+    "expected_domain": "ecommerce_recommendations",
+    "expected_data_types": ["parquet", "json"],
+    "expected_capabilities": ["ml_prediction", "feature_engineering"],
+    "reasoning": "User behavior is structured data, recommendations need collaborative filtering ML"
+  },
+  {
+    "input": "I need to process IoT sensor streams and detect anomalies in real-time.",
+    "expected_domain": "iot_anomaly_detection",
+    "expected_data_types": ["parquet", "json"],
+    "expected_capabilities": ["ml_prediction", "anomaly_detection", "streaming"],
+    "reasoning": "IoT data is time-series parquet/JSON, real-time needs streaming, anomaly detection ML"
+  },
+  {
+    "input": "Analyze employee survey responses and generate insights reports.",
+    "expected_domain": "hr_analytics",
+    "expected_data_types": ["csv", "text"],
+    "expected_capabilities": ["sentiment_analysis", "app_generation"],
+    "reasoning": "Survey data is CSV/text, sentiment analysis for insights, report generation"
+  },
+  {
+    "input": "Build a medical literature search with citation extraction.",
+    "expected_domain": "healthcare_research",
+    "expected_data_types": ["pdf"],
+    "expected_capabilities": ["cortex_search", "document_chunking", "extraction"],
+    "reasoning": "Medical papers are PDFs, literature search needs Cortex Search with metadata extraction"
+  },
+  {
+    "input": "Process financial statements and create an earnings analysis chatbot.",
+    "expected_domain": "financial_analysis",
+    "expected_data_types": ["pdf", "xlsx"],
+    "expected_capabilities": ["cortex_analyst", "cortex_search", "rag"],
+    "reasoning": "Financial docs need parsing, earnings analysis needs semantic model, chatbot needs RAG"
+  }
+]

@@ -1,0 +1,90 @@
+name: ORCHESTRATED_DRILLING_MODEL
+tables:
+  - name: DRILLING_TIME
+    base_table: DRILLING_OPS_DB.RAW.DRILLING_TIME
+    dimensions:
+      - name: WELL_NAME
+        expr: "WELL_NAME"
+        data_type: TEXT
+        description: "Name of the well"
+      - name: TIMESTAMP
+        expr: "TIMESTAMP"
+        data_type: NUMBER
+        description: "Timestamp of the data record"
+    facts:
+      - name: RATE_OF_PENETRATION_M_H
+        expr: "RATE_OF_PENETRATION_M_H"
+        data_type: FLOAT
+        description: "Rate of penetration in meters per hour"
+      - name: PUMP_2_STROKE_RATE_1_MIN
+        expr: "PUMP_2_STROKE_RATE_1_MIN"
+        data_type: FLOAT
+        description: "Stroke rate of pump 2 in strokes per minute"
+      - name: AVERAGE_SURFACE_TORQUE_KN_M
+        expr: "AVERAGE_SURFACE_TORQUE_KN_M"
+        data_type: FLOAT
+        description: "Average surface torque in kilonewton meters"
+      - name: PUMP_3_STROKE_RATE_1_MIN
+        expr: "PUMP_3_STROKE_RATE_1_MIN"
+        data_type: FLOAT
+        description: "Stroke rate of pump 3 in strokes per minute"
+      - name: BIT_DEPTH_MD_M
+        expr: "BIT_DEPTH_MD_M"
+        data_type: FLOAT
+        description: "Bit depth in measured depth meters"
+      - name: BLOCK_POSITION_M
+        expr: "BLOCK_POSITION_M"
+        data_type: FLOAT
+        description: "Block position in meters"
+      - name: PUMP_1_STROKE_RATE_1_MIN
+        expr: "PUMP_1_STROKE_RATE_1_MIN"
+        data_type: FLOAT
+        description: "Stroke rate of pump 1 in strokes per minute"
+      - name: AVERAGE_ROTARY_SPEED_RPM
+        expr: "AVERAGE_ROTARY_SPEED_RPM"
+        data_type: FLOAT
+        description: "Average rotary speed in revolutions per minute"
+      - name: AVERAGE_STANDPIPE_PRESSURE_KPA
+        expr: "AVERAGE_STANDPIPE_PRESSURE_KPA"
+        data_type: FLOAT
+        description: "Average standpipe pressure in kilopascals"
+      - name: MUD_FLOW_IN_L_MIN
+        expr: "MUD_FLOW_IN_L_MIN"
+        data_type: FLOAT
+        description: "Mud flow in liters per minute"
+      - name: MUD_DENSITY_IN_G_CM3
+        expr: "MUD_DENSITY_IN_G_CM3"
+        data_type: FLOAT
+        description: "Mud density in grams per cubic centimeter"
+      - name: MUD_DENSITY_OUT_G_CM3
+        expr: "MUD_DENSITY_OUT_G_CM3"
+        data_type: FLOAT
+        description: "Mud density out in grams per cubic centimeter"
+      - name: AVERAGE_HOOKLOAD_KKGF
+        expr: "AVERAGE_HOOKLOAD_KKGF"
+        data_type: FLOAT
+        description: "Average hookload in kilograms-force"
+      - name: HOLE_DEPTH_MD_M
+        expr: "HOLE_DEPTH_MD_M"
+        data_type: FLOAT
+        description: "Hole depth in measured depth meters"
+      - name: WEIGHT_ON_BIT_KKGF
+        expr: "WEIGHT_ON_BIT_KKGF"
+        data_type: FLOAT
+        description: "Weight on bit in kilograms-force"
+verified_queries:
+  - name: average_rate_of_penetration_by_well
+    question: "What is the average rate of penetration for each well?"
+    sql: "SELECT WELL_NAME, AVG(RATE_OF_PENETRATION_M_H) AS avg_rate_of_penetration FROM DRILLING_TIME GROUP BY WELL_NAME"
+  - name: max_hookload_by_well
+    question: "What is the maximum hookload for each well?"
+    sql: "SELECT WELL_NAME, MAX(AVERAGE_HOOKLOAD_KKGF) AS max_hookload FROM DRILLING_TIME GROUP BY WELL_NAME"
+  - name: average_mud_flow_by_well
+    question: "What is the average mud flow for each well?"
+    sql: "SELECT WELL_NAME, AVG(MUD_FLOW_IN_L_MIN) AS avg_mud_flow FROM DRILLING_TIME GROUP BY WELL_NAME"
+  - name: total_bit_depth_by_well
+    question: "What is the total bit depth for each well?"
+    sql: "SELECT WELL_NAME, SUM(BIT_DEPTH_MD_M) AS total_bit_depth FROM DRILLING_TIME GROUP BY WELL_NAME"
+  - name: average_surface_torque_by_well
+    question: "What is the average surface torque for each well?"
+    sql: "SELECT WELL_NAME, AVG(AVERAGE_SURFACE_TORQUE_KN_M) AS avg_surface_torque FROM DRILLING_TIME GROUP BY WELL_NAME"

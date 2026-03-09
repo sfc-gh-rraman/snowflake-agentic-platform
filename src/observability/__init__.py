@@ -1,5 +1,27 @@
-"""Observability module for tracing and logging."""
+"""Observability module for tracing and logging.
 
-from .tracer import LangSmithTracer, CortexCallLogger
+Provides triple-logging to:
+- LangSmith (LangChain ecosystem)
+- Langfuse (cost tracking, user feedback)
+- Snowflake (persistent storage, compliance)
+"""
 
-__all__ = ["LangSmithTracer", "CortexCallLogger"]
+from .tracer import (
+    LangSmithTracer,
+    CortexCallLogger,
+    DualLogger,
+    TripleLogger,
+    TraceSpan,
+    create_logger,
+)
+from .langfuse_tracer import LangfuseTracer
+
+__all__ = [
+    "LangSmithTracer",
+    "CortexCallLogger",
+    "DualLogger",
+    "TripleLogger",
+    "TraceSpan",
+    "LangfuseTracer",
+    "create_logger",
+]

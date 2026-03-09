@@ -1,0 +1,128 @@
+[
+  {
+    "input": {
+      "table": "AGENTIC_PLATFORM.CURATED.SALES",
+      "columns": [
+        {"name": "SALE_ID", "type": "VARCHAR", "sample": "S001"},
+        {"name": "PRODUCT_ID", "type": "VARCHAR", "sample": "P001"},
+        {"name": "SALE_DATE", "type": "DATE", "sample": "2024-01-15"},
+        {"name": "QUANTITY", "type": "NUMBER", "sample": 5},
+        {"name": "UNIT_PRICE", "type": "NUMBER(10,2)", "sample": 29.99},
+        {"name": "TOTAL_AMOUNT", "type": "NUMBER(10,2)", "sample": 149.95},
+        {"name": "REGION", "type": "VARCHAR", "sample": "West"}
+      ],
+      "use_case_context": "Sales analytics for regional performance"
+    },
+    "expected_semantic_model": {
+      "dimensions": ["PRODUCT_ID", "SALE_DATE", "REGION"],
+      "measures": ["QUANTITY", "UNIT_PRICE", "TOTAL_AMOUNT"],
+      "time_dimension": "SALE_DATE",
+      "has_descriptions": true
+    },
+    "test_questions": [
+      {"question": "What were total sales by region last month?", "expected_columns": ["REGION", "TOTAL_AMOUNT"]},
+      {"question": "How many units were sold per product?", "expected_columns": ["PRODUCT_ID", "QUANTITY"]}
+    ]
+  },
+  {
+    "input": {
+      "table": "AGENTIC_PLATFORM.CURATED.CUSTOMERS",
+      "columns": [
+        {"name": "CUSTOMER_ID", "type": "VARCHAR", "sample": "C001"},
+        {"name": "CUSTOMER_NAME", "type": "VARCHAR", "sample": "Acme Corp"},
+        {"name": "SEGMENT", "type": "VARCHAR", "sample": "Enterprise"},
+        {"name": "COUNTRY", "type": "VARCHAR", "sample": "USA"},
+        {"name": "SIGNUP_DATE", "type": "DATE", "sample": "2023-06-01"},
+        {"name": "LIFETIME_VALUE", "type": "NUMBER(12,2)", "sample": 50000.00},
+        {"name": "IS_ACTIVE", "type": "BOOLEAN", "sample": true}
+      ],
+      "use_case_context": "Customer segmentation analysis"
+    },
+    "expected_semantic_model": {
+      "dimensions": ["CUSTOMER_ID", "CUSTOMER_NAME", "SEGMENT", "COUNTRY", "IS_ACTIVE"],
+      "measures": ["LIFETIME_VALUE"],
+      "time_dimension": "SIGNUP_DATE",
+      "has_filters": true
+    },
+    "test_questions": [
+      {"question": "How many active customers per segment?", "expected_columns": ["SEGMENT", "CUSTOMER_ID"]},
+      {"question": "What is the average lifetime value by country?", "expected_columns": ["COUNTRY", "LIFETIME_VALUE"]}
+    ]
+  },
+  {
+    "input": {
+      "table": "AGENTIC_PLATFORM.CURATED.SENSOR_READINGS",
+      "columns": [
+        {"name": "READING_ID", "type": "VARCHAR", "sample": "R001"},
+        {"name": "SENSOR_ID", "type": "VARCHAR", "sample": "SENS_001"},
+        {"name": "TIMESTAMP", "type": "TIMESTAMP_NTZ", "sample": "2024-01-15 10:30:00"},
+        {"name": "TEMPERATURE", "type": "NUMBER(5,2)", "sample": 72.5},
+        {"name": "PRESSURE", "type": "NUMBER(6,2)", "sample": 101.3},
+        {"name": "VIBRATION", "type": "NUMBER(4,2)", "sample": 0.05},
+        {"name": "EQUIPMENT_ID", "type": "VARCHAR", "sample": "EQ001"}
+      ],
+      "use_case_context": "Equipment monitoring and anomaly detection"
+    },
+    "expected_semantic_model": {
+      "dimensions": ["SENSOR_ID", "EQUIPMENT_ID"],
+      "measures": ["TEMPERATURE", "PRESSURE", "VIBRATION"],
+      "time_dimension": "TIMESTAMP",
+      "has_aggregations": true
+    },
+    "test_questions": [
+      {"question": "What is the average temperature per equipment today?", "expected_columns": ["EQUIPMENT_ID", "TEMPERATURE"]},
+      {"question": "Show pressure readings for sensor SENS_001", "expected_columns": ["TIMESTAMP", "PRESSURE"]}
+    ]
+  },
+  {
+    "input": {
+      "table": "AGENTIC_PLATFORM.CURATED.TRANSACTIONS",
+      "columns": [
+        {"name": "TXN_ID", "type": "VARCHAR", "sample": "T001"},
+        {"name": "ACCOUNT_ID", "type": "VARCHAR", "sample": "A001"},
+        {"name": "TXN_TYPE", "type": "VARCHAR", "sample": "DEBIT"},
+        {"name": "TXN_DATE", "type": "TIMESTAMP_NTZ", "sample": "2024-01-15 14:22:00"},
+        {"name": "AMOUNT", "type": "NUMBER(12,2)", "sample": 1500.00},
+        {"name": "MERCHANT", "type": "VARCHAR", "sample": "Amazon"},
+        {"name": "CATEGORY", "type": "VARCHAR", "sample": "Shopping"},
+        {"name": "IS_FRAUD", "type": "BOOLEAN", "sample": false}
+      ],
+      "use_case_context": "Transaction analysis and fraud monitoring"
+    },
+    "expected_semantic_model": {
+      "dimensions": ["ACCOUNT_ID", "TXN_TYPE", "MERCHANT", "CATEGORY", "IS_FRAUD"],
+      "measures": ["AMOUNT"],
+      "time_dimension": "TXN_DATE",
+      "has_filters": true
+    },
+    "test_questions": [
+      {"question": "What is total spending by category this week?", "expected_columns": ["CATEGORY", "AMOUNT"]},
+      {"question": "How many fraud transactions per merchant?", "expected_columns": ["MERCHANT", "IS_FRAUD"]}
+    ]
+  },
+  {
+    "input": {
+      "table": "AGENTIC_PLATFORM.CURATED.EMPLOYEES",
+      "columns": [
+        {"name": "EMPLOYEE_ID", "type": "VARCHAR", "sample": "E001"},
+        {"name": "NAME", "type": "VARCHAR", "sample": "John Smith"},
+        {"name": "DEPARTMENT", "type": "VARCHAR", "sample": "Engineering"},
+        {"name": "HIRE_DATE", "type": "DATE", "sample": "2022-03-15"},
+        {"name": "SALARY", "type": "NUMBER(10,2)", "sample": 95000.00},
+        {"name": "PERFORMANCE_SCORE", "type": "NUMBER(3,1)", "sample": 4.2},
+        {"name": "IS_MANAGER", "type": "BOOLEAN", "sample": false}
+      ],
+      "use_case_context": "HR analytics and workforce planning"
+    },
+    "expected_semantic_model": {
+      "dimensions": ["EMPLOYEE_ID", "NAME", "DEPARTMENT", "IS_MANAGER"],
+      "measures": ["SALARY", "PERFORMANCE_SCORE"],
+      "time_dimension": "HIRE_DATE",
+      "sensitive_columns": ["SALARY"]
+    },
+    "test_questions": [
+      {"question": "What is average salary by department?", "expected_columns": ["DEPARTMENT", "SALARY"]},
+      {"question": "How many managers per department?", "expected_columns": ["DEPARTMENT", "IS_MANAGER"]}
+    ]
+  }
+]
