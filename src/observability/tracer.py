@@ -11,9 +11,10 @@ The TripleLogger class coordinates all three for comprehensive coverage.
 import json
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
 from functools import wraps
+from typing import Any
 
 from .langfuse_tracer import LangfuseTracer
 
@@ -23,13 +24,13 @@ class TraceSpan:
     span_id: str
     name: str
     start_time: float
-    end_time: Optional[float] = None
-    inputs: Optional[Dict[str, Any]] = None
-    outputs: Optional[Dict[str, Any]] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    error: Optional[str] = None
+    end_time: float | None = None
+    inputs: dict[str, Any] | None = None
+    outputs: dict[str, Any] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "span_id": self.span_id,
             "name": self.name,
@@ -49,23 +50,24 @@ class LangSmithTracer:
     def __init__(
         self,
         project_name: str = "agentic-platform",
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
     ):
         self.project_name = project_name
         self.api_key = api_key or os.getenv("LANGSMITH_API_KEY")
         self.endpoint = os.getenv("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
         self._enabled = bool(self.api_key)
-        self._spans: List[TraceSpan] = []
+        self._spans: list[TraceSpan] = []
 
     def start_span(
         self,
         name: str,
-        inputs: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        inputs: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         import uuid
+
         span_id = str(uuid.uuid4())
-        
+
         span = TraceSpan(
             span_id=span_id,
             name=name,
@@ -74,21 +76,21 @@ class LangSmithTracer:
             metadata=metadata or {},
         )
         self._spans.append(span)
-        
+
         return span_id
 
     def end_span(
         self,
         span_id: str,
-        outputs: Optional[Dict[str, Any]] = None,
-        error: Optional[str] = None,
+        outputs: dict[str, Any] | None = None,
+        error: str | None = None,
     ) -> None:
         for span in self._spans:
             if span.span_id == span_id:
                 span.end_time = time.time()
                 span.outputs = outputs
                 span.error = error
-                
+
                 if self._enabled:
                     self._send_to_langsmith(span)
                 break
@@ -99,7 +101,7 @@ class LangSmithTracer:
 
         try:
             import requests
-            
+
             payload = {
                 "name": span.name,
                 "run_type": "chain",
@@ -140,7 +142,9 @@ class LangSmithTracer:
                 except Exception as e:
                     self.end_span(span_id, error=str(e))
                     raise
+
             return wrapper
+
         return decorator
 
 
@@ -149,7 +153,7 @@ class CortexCallLogger:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         database: str = "AGENTIC_PLATFORM",
         schema: str = "STATE",
     ):
@@ -167,14 +171,16 @@ class CortexCallLogger:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
     def _execute(self, sql: str) -> None:
-        if hasattr(self.session, 'sql'):
+        if hasattr(self.session, "sql"):
             self.session.sql(sql).collect()
         else:
             cursor = self.session.cursor()
@@ -186,7 +192,7 @@ class CortexCallLogger:
     def _escape(self, text: str) -> str:
         if text is None:
             return "NULL"
-        return f"'{str(text).replace(chr(39), chr(39)+chr(39))}'"
+        return f"'{str(text).replace(chr(39), chr(39) + chr(39))}'"
 
     def log_call(
         self,
@@ -195,18 +201,23 @@ class CortexCallLogger:
         prompt_text: str,
         response_text: str,
         latency_ms: int,
-        plan_id: Optional[str] = None,
-        phase_id: Optional[str] = None,
-        execution_id: Optional[str] = None,
-        prompt_tokens: Optional[int] = None,
-        response_tokens: Optional[int] = None,
+        plan_id: str | None = None,
+        phase_id: str | None = None,
+        execution_id: str | None = None,
+        prompt_tokens: int | None = None,
+        response_tokens: int | None = None,
         status: str = "success",
-        error_message: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        error_message: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         import uuid
+
         log_id = str(uuid.uuid4())
-        total_tokens = (prompt_tokens or 0) + (response_tokens or 0) if prompt_tokens or response_tokens else None
+        total_tokens = (
+            (prompt_tokens or 0) + (response_tokens or 0)
+            if prompt_tokens or response_tokens
+            else None
+        )
 
         metadata_json = json.dumps(metadata).replace("'", "''") if metadata else "{}"
 
@@ -217,16 +228,16 @@ class CortexCallLogger:
              latency_ms, status, error_message, metadata)
             VALUES (
                 '{log_id}',
-                {self._escape(plan_id) if plan_id else 'NULL'},
-                {self._escape(phase_id) if phase_id else 'NULL'},
-                {self._escape(execution_id) if execution_id else 'NULL'},
+                {self._escape(plan_id) if plan_id else "NULL"},
+                {self._escape(phase_id) if phase_id else "NULL"},
+                {self._escape(execution_id) if execution_id else "NULL"},
                 {self._escape(call_type)},
                 {self._escape(model_name)},
                 {self._escape(prompt_text[:10000] if prompt_text else None)},
-                {prompt_tokens or 'NULL'},
+                {prompt_tokens or "NULL"},
                 {self._escape(response_text[:10000] if response_text else None)},
-                {response_tokens or 'NULL'},
-                {total_tokens or 'NULL'},
+                {response_tokens or "NULL"},
+                {total_tokens or "NULL"},
                 {latency_ms},
                 {self._escape(status)},
                 {self._escape(error_message)},
@@ -243,7 +254,7 @@ class CortexCallLogger:
         self,
         prompt: str,
         model: str = "mistral-large2",
-        plan_id: Optional[str] = None,
+        plan_id: str | None = None,
     ) -> str:
         start_time = time.time()
         error = None
@@ -252,8 +263,8 @@ class CortexCallLogger:
         try:
             escaped = prompt.replace("'", "''")
             sql = f"SELECT SNOWFLAKE.CORTEX.COMPLETE('{model}', '{escaped}')"
-            
-            if hasattr(self.session, 'sql'):
+
+            if hasattr(self.session, "sql"):
                 result = self.session.sql(sql).collect()
                 response = result[0][0] if result else ""
             else:
@@ -284,14 +295,14 @@ class CortexCallLogger:
 
 class DualLogger:
     """Dual logger that writes to both LangSmith and Snowflake.
-    
+
     DEPRECATED: Use TripleLogger instead for full observability.
     """
 
     def __init__(
         self,
         langsmith_project: str = "agentic-platform",
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
     ):
         self.langsmith = LangSmithTracer(project_name=langsmith_project)
         self.snowflake = CortexCallLogger(connection_name=connection_name)
@@ -327,12 +338,12 @@ class DualLogger:
 
 class TripleLogger:
     """Triple logger that writes to LangSmith, Langfuse, AND Snowflake.
-    
+
     This provides comprehensive observability:
     - LangSmith: LangChain ecosystem integration, playground testing
     - Langfuse: Cost tracking, user feedback, prompt management
     - Snowflake: Persistent storage, compliance, custom analytics
-    
+
     Usage:
         logger = TripleLogger(
             langsmith_project="drilling-copilot",
@@ -340,14 +351,14 @@ class TripleLogger:
             langfuse_secret_key="sk-...",
             snowflake_database="DRILLING_OPS_DB",
         )
-        
+
         # Start a trace for a user session
         trace_id = logger.start_trace(
             name="copilot_query",
             user_id="driller-123",
             session_id="shift-morning",
         )
-        
+
         # Log a Cortex call
         logger.log_cortex_complete(
             prompt="Analyze torque trend...",
@@ -356,7 +367,7 @@ class TripleLogger:
             latency_ms=450,
             trace_id=trace_id,
         )
-        
+
         # Log a search call
         logger.log_cortex_search(
             query="stuck pipe incidents",
@@ -365,7 +376,7 @@ class TripleLogger:
             latency_ms=120,
             trace_id=trace_id,
         )
-        
+
         # End trace
         logger.end_trace(trace_id)
     """
@@ -373,10 +384,10 @@ class TripleLogger:
     def __init__(
         self,
         langsmith_project: str = "agentic-platform",
-        langfuse_public_key: Optional[str] = None,
-        langfuse_secret_key: Optional[str] = None,
-        langfuse_host: Optional[str] = None,
-        snowflake_connection_name: Optional[str] = None,
+        langfuse_public_key: str | None = None,
+        langfuse_secret_key: str | None = None,
+        langfuse_host: str | None = None,
+        snowflake_connection_name: str | None = None,
         snowflake_database: str = "AGENTIC_PLATFORM",
         snowflake_schema: str = "ORCHESTRATOR",
         debug: bool = False,
@@ -395,7 +406,7 @@ class TripleLogger:
             schema=snowflake_schema,
         )
         self.debug = debug
-        self._active_traces: Dict[str, Dict[str, Any]] = {}
+        self._active_traces: dict[str, dict[str, Any]] = {}
 
     @property
     def langfuse_enabled(self) -> bool:
@@ -409,14 +420,14 @@ class TripleLogger:
 
     def get_langfuse_callback(
         self,
-        user_id: Optional[str] = None,
-        session_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         """Get a LangChain callback handler for automatic tracing.
-        
+
         Use this with LangGraph for automatic span creation:
-        
+
             handler = logger.get_langfuse_callback(user_id="driller-123")
             result = graph.invoke(state, config={"callbacks": [handler]})
         """
@@ -429,18 +440,19 @@ class TripleLogger:
     def start_trace(
         self,
         name: str,
-        user_id: Optional[str] = None,
-        session_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        input_data: Optional[Dict[str, Any]] = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        input_data: dict[str, Any] | None = None,
     ) -> str:
         """Start a new trace across all logging systems.
-        
+
         Returns a trace_id that should be passed to subsequent log calls.
         """
         import uuid
+
         trace_id = str(uuid.uuid4())
-        
+
         langsmith_span_id = self.langsmith.start_span(
             name=name,
             inputs=input_data,
@@ -450,7 +462,7 @@ class TripleLogger:
                 **(metadata or {}),
             },
         )
-        
+
         langfuse_trace_id = self.langfuse.start_trace(
             name=name,
             user_id=user_id,
@@ -458,7 +470,7 @@ class TripleLogger:
             metadata=metadata,
             input_data=input_data,
         )
-        
+
         self._active_traces[trace_id] = {
             "langsmith_span_id": langsmith_span_id,
             "langfuse_trace_id": langfuse_trace_id,
@@ -467,29 +479,29 @@ class TripleLogger:
             "user_id": user_id,
             "session_id": session_id,
         }
-        
+
         return trace_id
 
     def end_trace(
         self,
         trace_id: str,
-        output_data: Optional[Dict[str, Any]] = None,
+        output_data: dict[str, Any] | None = None,
         status: str = "success",
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
     ) -> None:
         """End a trace across all logging systems."""
         if trace_id not in self._active_traces:
             return
-            
+
         trace_data = self._active_traces[trace_id]
-        
+
         if trace_data.get("langsmith_span_id"):
             self.langsmith.end_span(
                 trace_data["langsmith_span_id"],
                 outputs=output_data,
                 error=error_message,
             )
-        
+
         if trace_data.get("langfuse_trace_id"):
             self.langfuse.end_trace(
                 trace_data["langfuse_trace_id"],
@@ -497,7 +509,7 @@ class TripleLogger:
                 level="ERROR" if error_message else "DEFAULT",
                 status_message=error_message,
             )
-        
+
         del self._active_traces[trace_id]
 
     def log_cortex_complete(
@@ -506,12 +518,12 @@ class TripleLogger:
         response: str,
         model: str = "mistral-large2",
         latency_ms: int = 0,
-        trace_id: Optional[str] = None,
-        plan_id: Optional[str] = None,
-        phase_id: Optional[str] = None,
-        prompt_tokens: Optional[int] = None,
-        response_tokens: Optional[int] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        trace_id: str | None = None,
+        plan_id: str | None = None,
+        phase_id: str | None = None,
+        prompt_tokens: int | None = None,
+        response_tokens: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Log a Cortex Complete (LLM) call to all systems."""
         span_id = self.langsmith.start_span(
@@ -523,11 +535,11 @@ class TripleLogger:
             span_id,
             outputs={"response": response[:500]},
         )
-        
+
         langfuse_trace = None
         if trace_id and trace_id in self._active_traces:
             langfuse_trace = self._active_traces[trace_id].get("langfuse_trace_id")
-        
+
         self.langfuse.log_generation(
             name="cortex_complete",
             model=model,
@@ -537,11 +549,13 @@ class TripleLogger:
             usage={
                 "prompt_tokens": prompt_tokens or 0,
                 "completion_tokens": response_tokens or 0,
-            } if prompt_tokens or response_tokens else None,
+            }
+            if prompt_tokens or response_tokens
+            else None,
             latency_ms=latency_ms,
             metadata=metadata,
         )
-        
+
         self.snowflake.log_call(
             call_type="complete",
             model_name=model,
@@ -558,12 +572,12 @@ class TripleLogger:
     def log_cortex_search(
         self,
         query: str,
-        results: List[Dict[str, Any]],
+        results: list[dict[str, Any]],
         service_name: str,
         latency_ms: int = 0,
-        trace_id: Optional[str] = None,
-        plan_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        trace_id: str | None = None,
+        plan_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Log a Cortex Search call to all systems."""
         span_id = self.langsmith.start_span(
@@ -575,11 +589,11 @@ class TripleLogger:
             span_id,
             outputs={"result_count": len(results)},
         )
-        
+
         langfuse_trace = None
         if trace_id and trace_id in self._active_traces:
             langfuse_trace = self._active_traces[trace_id].get("langfuse_trace_id")
-        
+
         self.langfuse.log_cortex_search(
             query=query,
             results=results,
@@ -588,7 +602,7 @@ class TripleLogger:
             latency_ms=latency_ms,
             metadata=metadata,
         )
-        
+
         self.snowflake.log_call(
             call_type="search",
             model_name=service_name,
@@ -607,12 +621,12 @@ class TripleLogger:
         self,
         question: str,
         generated_sql: str,
-        results: Optional[List[Dict[str, Any]]] = None,
-        semantic_model: Optional[str] = None,
+        results: list[dict[str, Any]] | None = None,
+        semantic_model: str | None = None,
         latency_ms: int = 0,
-        trace_id: Optional[str] = None,
-        plan_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        trace_id: str | None = None,
+        plan_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Log a Cortex Analyst call to all systems."""
         span_id = self.langsmith.start_span(
@@ -624,11 +638,11 @@ class TripleLogger:
             span_id,
             outputs={"sql": generated_sql[:500], "result_count": len(results) if results else 0},
         )
-        
+
         langfuse_trace = None
         if trace_id and trace_id in self._active_traces:
             langfuse_trace = self._active_traces[trace_id].get("langfuse_trace_id")
-        
+
         self.langfuse.log_cortex_analyst(
             question=question,
             generated_sql=generated_sql,
@@ -638,7 +652,7 @@ class TripleLogger:
             latency_ms=latency_ms,
             metadata=metadata,
         )
-        
+
         self.snowflake.log_call(
             call_type="analyst",
             model_name=semantic_model or "cortex_analyst",
@@ -657,12 +671,12 @@ class TripleLogger:
         self,
         agent_name: str,
         action: str,
-        inputs: Optional[Dict[str, Any]] = None,
-        outputs: Optional[Dict[str, Any]] = None,
+        inputs: dict[str, Any] | None = None,
+        outputs: dict[str, Any] | None = None,
         latency_ms: int = 0,
-        trace_id: Optional[str] = None,
-        plan_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        trace_id: str | None = None,
+        plan_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Log an agent action (Watchdog alert, Advisor recommendation, etc.)."""
         span_id = self.langsmith.start_span(
@@ -671,11 +685,11 @@ class TripleLogger:
             metadata={"agent": agent_name, "action": action, "latency_ms": latency_ms},
         )
         self.langsmith.end_span(span_id, outputs=outputs)
-        
+
         langfuse_trace = None
         if trace_id and trace_id in self._active_traces:
             langfuse_trace = self._active_traces[trace_id].get("langfuse_trace_id")
-        
+
         self.langfuse.log_agent_action(
             agent_name=agent_name,
             action=action,
@@ -685,7 +699,7 @@ class TripleLogger:
             latency_ms=latency_ms,
             metadata=metadata,
         )
-        
+
         self.snowflake.log_call(
             call_type="agent",
             model_name=f"{agent_name}:{action}",
@@ -705,7 +719,7 @@ class TripleLogger:
         trace_id: str,
         score: float,
         name: str = "user_feedback",
-        comment: Optional[str] = None,
+        comment: str | None = None,
     ) -> None:
         """Add user feedback/score to a trace (Langfuse only)."""
         if trace_id in self._active_traces:
@@ -728,34 +742,35 @@ class TripleLogger:
 
 
 def traceable(
-    name: Optional[str] = None,
+    name: str | None = None,
     run_type: str = "chain",
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> Callable:
     """Decorator to trace function execution with LangSmith-style tracing.
-    
+
     Usage:
         @traceable(name="my_function")
         def my_function(arg1, arg2):
             return result
-            
+
         @traceable(name="agent_step", run_type="llm")
         def call_llm(prompt):
             return response
     """
+
     def decorator(func: Callable) -> Callable:
         tracer = LangSmithTracer()
-        
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             func_name = name or func.__name__
-            
+
             input_data = {}
             if args:
                 input_data["args"] = str(args)[:1000]
             if kwargs:
                 input_data["kwargs"] = str(kwargs)[:1000]
-            
+
             span_id = tracer.start_span(
                 name=func_name,
                 inputs=input_data,
@@ -766,36 +781,37 @@ def traceable(
                     **(metadata or {}),
                 },
             )
-            
+
             try:
                 result = func(*args, **kwargs)
-                
+
                 output_data = {}
                 if result is not None:
                     if isinstance(result, dict):
                         output_data = {k: str(v)[:500] for k, v in list(result.items())[:10]}
                     else:
                         output_data = {"result": str(result)[:1000]}
-                
+
                 tracer.end_span(span_id, outputs=output_data)
                 return result
-                
+
             except Exception as e:
                 tracer.end_span(span_id, error=str(e))
                 raise
-        
+
         return wrapper
+
     return decorator
 
 
 def create_logger(
     database: str = "AGENTIC_PLATFORM",
     schema: str = "ORCHESTRATOR",
-    connection_name: Optional[str] = None,
+    connection_name: str | None = None,
     debug: bool = False,
 ) -> TripleLogger:
     """Factory function to create a configured TripleLogger.
-    
+
     Reads API keys from environment variables:
     - LANGSMITH_API_KEY
     - LANGFUSE_PUBLIC_KEY

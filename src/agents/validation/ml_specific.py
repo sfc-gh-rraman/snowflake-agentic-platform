@@ -1,18 +1,18 @@
 """ML-specific validator - checks feature distributions and label balance."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
 class MLValidationResult:
     passed: bool
-    checks: List[Dict[str, Any]]
+    checks: list[dict[str, Any]]
     score: float
-    issues: List[str]
-    recommendations: List[str]
+    issues: list[str]
+    recommendations: list[str]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "passed": self.passed,
             "checks": self.checks,
@@ -28,10 +28,10 @@ class MLValidator:
     def __init__(self, session=None):
         self._session = session
 
-    def _execute(self, sql: str) -> List[Dict]:
+    def _execute(self, sql: str) -> list[dict]:
         if self._session is None:
             return []
-        if hasattr(self._session, 'sql'):
+        if hasattr(self._session, "sql"):
             result = self._session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -50,9 +50,9 @@ class MLValidator:
         table_name: str,
         label_column: str,
         min_class_ratio: float = 0.1,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         sql = f"""
-            SELECT 
+            SELECT
                 "{label_column}" as label,
                 COUNT(*) as count
             FROM {table_name}
@@ -98,9 +98,9 @@ class MLValidator:
     def check_feature_variance(
         self,
         table_name: str,
-        feature_columns: List[str],
+        feature_columns: list[str],
         min_variance: float = 0.001,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         low_variance_cols = []
         variance_results = {}
 
@@ -114,7 +114,7 @@ class MLValidator:
                 results = self._execute(sql)
                 variance = results[0].get("VAR_VAL", 0) if results else 0
                 variance = variance if variance else 0
-                
+
                 variance_results[col] = round(float(variance), 6)
                 if variance < min_variance:
                     low_variance_cols.append(col)
@@ -132,13 +132,13 @@ class MLValidator:
     def check_feature_correlation(
         self,
         table_name: str,
-        feature_columns: List[str],
+        feature_columns: list[str],
         max_correlation: float = 0.95,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         high_correlations = []
 
         for i, col1 in enumerate(feature_columns[:10]):
-            for col2 in feature_columns[i+1:10]:
+            for col2 in feature_columns[i + 1 : 10]:
                 sql = f"""
                     SELECT CORR("{col1}", "{col2}") as corr_val
                     FROM {table_name}
@@ -148,13 +148,15 @@ class MLValidator:
                     results = self._execute(sql)
                     corr = results[0].get("CORR_VAL", 0) if results else 0
                     corr = abs(corr) if corr else 0
-                    
+
                     if corr > max_correlation:
-                        high_correlations.append({
-                            "col1": col1,
-                            "col2": col2,
-                            "correlation": round(float(corr), 4),
-                        })
+                        high_correlations.append(
+                            {
+                                "col1": col1,
+                                "col2": col2,
+                                "correlation": round(float(corr), 4),
+                            }
+                        )
                 except Exception:
                     pass
 
@@ -168,9 +170,9 @@ class MLValidator:
     def check_train_test_leakage_risk(
         self,
         table_name: str,
-        timestamp_column: Optional[str] = None,
-        id_column: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        timestamp_column: str | None = None,
+        id_column: str | None = None,
+    ) -> dict[str, Any]:
         risks = []
 
         if not timestamp_column and not id_column:
@@ -178,7 +180,7 @@ class MLValidator:
 
         if timestamp_column:
             sql = f"""
-                SELECT 
+                SELECT
                     MIN("{timestamp_column}") as min_ts,
                     MAX("{timestamp_column}") as max_ts,
                     COUNT(DISTINCT DATE_TRUNC('day', "{timestamp_column}")) as distinct_days
@@ -205,10 +207,10 @@ class MLValidator:
     def validate(
         self,
         table_name: str,
-        label_column: Optional[str] = None,
-        feature_columns: Optional[List[str]] = None,
-        timestamp_column: Optional[str] = None,
-        id_column: Optional[str] = None,
+        label_column: str | None = None,
+        feature_columns: list[str] | None = None,
+        timestamp_column: str | None = None,
+        id_column: str | None = None,
     ) -> MLValidationResult:
         checks = []
         issues = []
@@ -225,21 +227,29 @@ class MLValidator:
             variance_check = self.check_feature_variance(table_name, feature_columns)
             checks.append(variance_check)
             if not variance_check.get("passed"):
-                issues.append(f"Low variance features: {variance_check.get('low_variance_columns', [])}")
+                issues.append(
+                    f"Low variance features: {variance_check.get('low_variance_columns', [])}"
+                )
                 recommendations.append("Remove or transform low-variance features")
 
             if len(feature_columns) > 1:
                 corr_check = self.check_feature_correlation(table_name, feature_columns)
                 checks.append(corr_check)
                 if not corr_check.get("passed"):
-                    issues.append(f"Highly correlated features detected: {len(corr_check.get('high_correlations', []))} pairs")
-                    recommendations.append("Consider removing highly correlated features to reduce multicollinearity")
+                    issues.append(
+                        f"Highly correlated features detected: {len(corr_check.get('high_correlations', []))} pairs"
+                    )
+                    recommendations.append(
+                        "Consider removing highly correlated features to reduce multicollinearity"
+                    )
 
         leakage_check = self.check_train_test_leakage_risk(table_name, timestamp_column, id_column)
         checks.append(leakage_check)
         if not leakage_check.get("passed"):
             issues.extend(leakage_check.get("risks", []))
-            recommendations.append("Ensure proper temporal train/test split to prevent data leakage")
+            recommendations.append(
+                "Ensure proper temporal train/test split to prevent data leakage"
+            )
 
         passed_count = sum(1 for c in checks if c.get("passed"))
         score = passed_count / len(checks) if checks else 0

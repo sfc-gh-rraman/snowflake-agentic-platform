@@ -1,11 +1,12 @@
 """LangGraph state machine for ML Model Builder agent."""
 
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Annotated
-from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.base import BaseCheckpointSaver
 import operator
+from typing import Annotated, Any, Literal, TypedDict
 
-from .model_builder import MLModelBuilder, MLModelBuilderState, TaskType, ModelMetrics
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.graph import END, StateGraph
+
+from .model_builder import MLModelBuilder, MLModelBuilderState, ModelMetrics, TaskType
 
 
 class MLGraphState(TypedDict):
@@ -15,18 +16,18 @@ class MLGraphState(TypedDict):
     version: str
     database: str
     schema: str
-    exclude_columns: List[str]
-    task_type: Optional[str]
-    feature_columns: List[str]
-    pipeline: Optional[Any]
-    train_df: Optional[Any]
-    test_df: Optional[Any]
-    metrics: Optional[Dict[str, Any]]
-    model_reference: Optional[str]
-    explanation: Optional[Dict[str, Any]]
+    exclude_columns: list[str]
+    task_type: str | None
+    feature_columns: list[str]
+    pipeline: Any | None
+    train_df: Any | None
+    test_df: Any | None
+    metrics: dict[str, Any] | None
+    model_reference: str | None
+    explanation: dict[str, Any] | None
     current_state: str
-    errors: Annotated[List[str], operator.add]
-    messages: Annotated[List[Dict[str, str]], operator.add]
+    errors: Annotated[list[str], operator.add]
+    messages: Annotated[list[dict[str, str]], operator.add]
 
 
 def create_builder(state: MLGraphState) -> MLModelBuilder:
@@ -36,9 +37,9 @@ def create_builder(state: MLGraphState) -> MLModelBuilder:
     )
 
 
-def task_classification_node(state: MLGraphState) -> Dict[str, Any]:
+def task_classification_node(state: MLGraphState) -> dict[str, Any]:
     builder = create_builder(state)
-    
+
     try:
         task_type = builder.classify_task(
             state["source_table"],
@@ -47,7 +48,12 @@ def task_classification_node(state: MLGraphState) -> Dict[str, Any]:
         return {
             "task_type": task_type.value,
             "current_state": MLModelBuilderState.FEATURE_SELECTION.value,
-            "messages": [{"role": "system", "content": f"TASK_CLASSIFICATION: Detected {task_type.value} task"}],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"TASK_CLASSIFICATION: Detected {task_type.value} task",
+                }
+            ],
         }
     except Exception as e:
         return {
@@ -57,27 +63,32 @@ def task_classification_node(state: MLGraphState) -> Dict[str, Any]:
         }
 
 
-def feature_selection_node(state: MLGraphState) -> Dict[str, Any]:
+def feature_selection_node(state: MLGraphState) -> dict[str, Any]:
     builder = create_builder(state)
-    
+
     try:
         features = builder.select_features(
             state["source_table"],
             state["target_column"],
             state.get("exclude_columns", []),
         )
-        
+
         if not features:
             return {
                 "current_state": MLModelBuilderState.FAILED.value,
                 "errors": ["No suitable numeric features found"],
                 "messages": [{"role": "system", "content": "FEATURE_SELECTION: No features found"}],
             }
-        
+
         return {
             "feature_columns": features,
             "current_state": MLModelBuilderState.TRAINING.value,
-            "messages": [{"role": "system", "content": f"FEATURE_SELECTION: Selected {len(features)} features"}],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"FEATURE_SELECTION: Selected {len(features)} features",
+                }
+            ],
         }
     except Exception as e:
         return {
@@ -87,11 +98,11 @@ def feature_selection_node(state: MLGraphState) -> Dict[str, Any]:
         }
 
 
-def training_node(state: MLGraphState) -> Dict[str, Any]:
+def training_node(state: MLGraphState) -> dict[str, Any]:
     builder = create_builder(state)
-    
+
     task_type = TaskType(state["task_type"])
-    
+
     try:
         train_result = builder.train(
             state["source_table"],
@@ -99,7 +110,7 @@ def training_node(state: MLGraphState) -> Dict[str, Any]:
             state["feature_columns"],
             task_type,
         )
-        
+
         return {
             "pipeline": train_result["pipeline"],
             "train_df": train_result["train_df"],
@@ -115,11 +126,11 @@ def training_node(state: MLGraphState) -> Dict[str, Any]:
         }
 
 
-def evaluation_node(state: MLGraphState) -> Dict[str, Any]:
+def evaluation_node(state: MLGraphState) -> dict[str, Any]:
     builder = create_builder(state)
-    
+
     task_type = TaskType(state["task_type"])
-    
+
     try:
         metrics = builder.evaluate(
             state["pipeline"],
@@ -127,11 +138,13 @@ def evaluation_node(state: MLGraphState) -> Dict[str, Any]:
             state["target_column"],
             task_type,
         )
-        
+
         return {
             "metrics": metrics.to_dict(),
             "current_state": MLModelBuilderState.REGISTRATION.value,
-            "messages": [{"role": "system", "content": f"EVALUATION: Metrics computed - {metrics.metrics}"}],
+            "messages": [
+                {"role": "system", "content": f"EVALUATION: Metrics computed - {metrics.metrics}"}
+            ],
         }
     except Exception as e:
         return {
@@ -141,15 +154,15 @@ def evaluation_node(state: MLGraphState) -> Dict[str, Any]:
         }
 
 
-def registration_node(state: MLGraphState) -> Dict[str, Any]:
+def registration_node(state: MLGraphState) -> dict[str, Any]:
     builder = create_builder(state)
-    
+
     task_type = TaskType(state["task_type"])
     metrics = ModelMetrics(
         task_type=task_type,
         metrics=state["metrics"]["metrics"],
     )
-    
+
     try:
         model_ref = builder.register(
             state["pipeline"],
@@ -158,11 +171,13 @@ def registration_node(state: MLGraphState) -> Dict[str, Any]:
             metrics,
             state["train_df"].limit(100),
         )
-        
+
         return {
             "model_reference": model_ref,
             "current_state": MLModelBuilderState.EXPLAINABILITY.value,
-            "messages": [{"role": "system", "content": f"REGISTRATION: Model registered as {model_ref}"}],
+            "messages": [
+                {"role": "system", "content": f"REGISTRATION: Model registered as {model_ref}"}
+            ],
         }
     except Exception as e:
         return {
@@ -172,20 +187,25 @@ def registration_node(state: MLGraphState) -> Dict[str, Any]:
         }
 
 
-def explainability_node(state: MLGraphState) -> Dict[str, Any]:
+def explainability_node(state: MLGraphState) -> dict[str, Any]:
     builder = create_builder(state)
-    
+
     try:
         explanation = builder.explain(
             state["pipeline"],
             state["test_df"],
             state["feature_columns"],
         )
-        
+
         return {
             "explanation": explanation,
             "current_state": MLModelBuilderState.COMPLETE.value,
-            "messages": [{"role": "system", "content": f"EXPLAINABILITY: Generated explanations using {explanation.get('method', 'unknown')}"}],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"EXPLAINABILITY: Generated explanations using {explanation.get('method', 'unknown')}",
+                }
+            ],
         }
     except Exception as e:
         return {
@@ -195,9 +215,13 @@ def explainability_node(state: MLGraphState) -> Dict[str, Any]:
         }
 
 
-def should_continue(state: MLGraphState) -> Literal["feature_selection", "training", "evaluation", "registration", "explainability", "end"]:
+def should_continue(
+    state: MLGraphState,
+) -> Literal[
+    "feature_selection", "training", "evaluation", "registration", "explainability", "end"
+]:
     current = state.get("current_state", "")
-    
+
     if current == MLModelBuilderState.FAILED.value:
         return "end"
     elif current == MLModelBuilderState.FEATURE_SELECTION.value:
@@ -214,25 +238,25 @@ def should_continue(state: MLGraphState) -> Literal["feature_selection", "traini
         return "end"
 
 
-def build_ml_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> StateGraph:
+def build_ml_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
     graph = StateGraph(MLGraphState)
-    
+
     graph.add_node("task_classification", task_classification_node)
     graph.add_node("feature_selection", feature_selection_node)
     graph.add_node("training", training_node)
     graph.add_node("evaluation", evaluation_node)
     graph.add_node("registration", registration_node)
     graph.add_node("explainability", explainability_node)
-    
+
     graph.set_entry_point("task_classification")
-    
+
     graph.add_conditional_edges(
         "task_classification",
         should_continue,
         {
             "feature_selection": "feature_selection",
             "end": END,
-        }
+        },
     )
     graph.add_conditional_edges(
         "feature_selection",
@@ -240,7 +264,7 @@ def build_ml_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> StateG
         {
             "training": "training",
             "end": END,
-        }
+        },
     )
     graph.add_conditional_edges(
         "training",
@@ -248,7 +272,7 @@ def build_ml_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> StateG
         {
             "evaluation": "evaluation",
             "end": END,
-        }
+        },
     )
     graph.add_conditional_edges(
         "evaluation",
@@ -256,7 +280,7 @@ def build_ml_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> StateG
         {
             "registration": "registration",
             "end": END,
-        }
+        },
     )
     graph.add_conditional_edges(
         "registration",
@@ -264,10 +288,10 @@ def build_ml_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> StateG
         {
             "explainability": "explainability",
             "end": END,
-        }
+        },
     )
     graph.add_edge("explainability", END)
-    
+
     return graph.compile(checkpointer=checkpointer)
 
 
@@ -278,12 +302,12 @@ def run_ml_pipeline(
     version: str = "v1",
     database: str = "AGENTIC_PLATFORM",
     schema: str = "ML",
-    exclude_columns: Optional[List[str]] = None,
-    checkpointer: Optional[BaseCheckpointSaver] = None,
+    exclude_columns: list[str] | None = None,
+    checkpointer: BaseCheckpointSaver | None = None,
     thread_id: str = "ml-default",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     graph = build_ml_graph(checkpointer)
-    
+
     initial_state: MLGraphState = {
         "source_table": source_table,
         "target_column": target_column,
@@ -304,8 +328,8 @@ def run_ml_pipeline(
         "errors": [],
         "messages": [],
     }
-    
+
     config = {"configurable": {"thread_id": thread_id}}
     result = graph.invoke(initial_state, config)
-    
+
     return result

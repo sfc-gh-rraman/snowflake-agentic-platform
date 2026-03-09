@@ -1,15 +1,15 @@
 """Seed initial agent definitions into the registry."""
 
-from .registry_query import AgentRegistryQuery
 from .models import (
-    AgentDefinition,
     AgentCapability,
+    AgentCategory,
+    AgentDefinition,
     AgentDependency,
     AgentTrigger,
-    AgentCategory,
     DependencyRelationship,
     StateMachine,
 )
+from .registry_query import AgentRegistryQuery
 
 
 def get_parquet_processor_agent() -> AgentDefinition:
@@ -18,7 +18,7 @@ def get_parquet_processor_agent() -> AgentDefinition:
         name="Parquet Processor",
         version="1.0.0",
         description="Processes parquet files from Snowflake stages into curated tables. "
-                    "Handles schema inference, profiling, quality checks, transformations, and loading.",
+        "Handles schema inference, profiling, quality checks, transformations, and loading.",
         category=AgentCategory.PREPROCESSING,
         capabilities=[
             AgentCapability(
@@ -64,7 +64,7 @@ def get_document_chunker_agent() -> AgentDefinition:
         name="Document Chunker",
         version="1.0.0",
         description="Extracts text from documents (PDF, TXT, DOCX), analyzes structure, "
-                    "creates semantic chunks, and loads them for RAG/Cortex Search.",
+        "creates semantic chunks, and loads them for RAG/Cortex Search.",
         category=AgentCategory.PREPROCESSING,
         capabilities=[
             AgentCapability(
@@ -109,8 +109,8 @@ def get_ml_model_builder_agent() -> AgentDefinition:
         name="ML Model Builder",
         version="1.0.0",
         description="Automatically builds and registers ML models using Snowpark ML. "
-                    "Handles task classification, feature selection, training, evaluation, "
-                    "registry, and explainability.",
+        "Handles task classification, feature selection, training, evaluation, "
+        "registry, and explainability.",
         category=AgentCategory.ML,
         capabilities=[
             AgentCapability(
@@ -150,7 +150,14 @@ def get_ml_model_builder_agent() -> AgentDefinition:
             ),
         ],
         state_machine=StateMachine(
-            states=["TASK_CLASSIFICATION", "FEATURE_SELECTION", "TRAINING", "EVALUATION", "REGISTRATION", "EXPLAINABILITY"],
+            states=[
+                "TASK_CLASSIFICATION",
+                "FEATURE_SELECTION",
+                "TRAINING",
+                "EVALUATION",
+                "REGISTRATION",
+                "EXPLAINABILITY",
+            ],
             initial_state="TASK_CLASSIFICATION",
             transitions=[
                 {"from": "TASK_CLASSIFICATION", "to": "FEATURE_SELECTION"},
@@ -169,7 +176,7 @@ def get_app_code_generator_agent() -> AgentDefinition:
         name="App Code Generator",
         version="1.0.0",
         description="Generates complete React + FastAPI applications from specifications. "
-                    "Creates frontend, backend, and deployment configurations.",
+        "Creates frontend, backend, and deployment configurations.",
         category=AgentCategory.APP_GENERATION,
         capabilities=[
             AgentCapability(
@@ -209,8 +216,13 @@ def get_app_code_generator_agent() -> AgentDefinition:
             ),
         ],
         state_machine=StateMachine(
-            states=["APP_SPEC_GENERATION", "REACT_CODE_GENERATION", "FASTAPI_CODE_GENERATION", 
-                    "DEPLOYMENT_CONFIG_GENERATION", "TEST_AND_VALIDATE"],
+            states=[
+                "APP_SPEC_GENERATION",
+                "REACT_CODE_GENERATION",
+                "FASTAPI_CODE_GENERATION",
+                "DEPLOYMENT_CONFIG_GENERATION",
+                "TEST_AND_VALIDATE",
+            ],
             initial_state="APP_SPEC_GENERATION",
             transitions=[
                 {"from": "APP_SPEC_GENERATION", "to": "REACT_CODE_GENERATION"},
@@ -228,7 +240,7 @@ def get_cortex_search_builder_agent() -> AgentDefinition:
         name="Cortex Search Builder",
         version="1.0.0",
         description="Creates Cortex Search services from document chunks. "
-                    "Configures embedding models, filter attributes, and search parameters.",
+        "Configures embedding models, filter attributes, and search parameters.",
         category=AgentCategory.SEARCH,
         capabilities=[
             AgentCapability(
@@ -262,7 +274,7 @@ def get_semantic_model_generator_agent() -> AgentDefinition:
         name="Semantic Model Generator",
         version="1.0.0",
         description="Generates semantic model YAML from table profiles. "
-                    "Identifies dimensions, facts, and creates verified queries.",
+        "Identifies dimensions, facts, and creates verified queries.",
         category=AgentCategory.SEMANTIC,
         capabilities=[
             AgentCapability(

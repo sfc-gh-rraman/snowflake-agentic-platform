@@ -4,13 +4,13 @@ import json
 import os
 import time
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from src.config import get_settings
 
 
-class DeploymentState(str, Enum):
+class DeploymentState(StrEnum):
     BUILDING = "BUILDING"
     PUSHING = "PUSHING"
     CREATING_SERVICE = "CREATING_SERVICE"
@@ -25,10 +25,10 @@ class DeploymentState(str, Enum):
 class DeploymentResult:
     status: DeploymentState
     service_name: str
-    endpoint_url: Optional[str]
-    error: Optional[str]
+    endpoint_url: str | None
+    error: str | None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "status": self.status.value,
             "service_name": self.service_name,
@@ -42,9 +42,9 @@ class SPCSDeployer:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
-        database: Optional[str] = None,
-        schema: Optional[str] = None,
+        connection_name: str | None = None,
+        database: str | None = None,
+        schema: str | None = None,
         compute_pool: str = "AGENTIC_COMPUTE_POOL",
         image_repo: str = "APP_IMAGES",
     ):
@@ -66,14 +66,16 @@ class SPCSDeployer:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
-    def _execute(self, sql: str) -> List[Dict]:
-        if hasattr(self.session, 'sql'):
+    def _execute(self, sql: str) -> list[dict]:
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -90,7 +92,7 @@ class SPCSDeployer:
     def ensure_compute_pool(self) -> str:
         check_sql = f"SHOW COMPUTE POOLS LIKE '{self.compute_pool}'"
         results = self._execute(check_sql)
-        
+
         if not results:
             create_sql = f"""
                 CREATE COMPUTE POOL IF NOT EXISTS {self.compute_pool}
@@ -101,21 +103,21 @@ class SPCSDeployer:
                     AUTO_SUSPEND_SECS = 300
             """
             self._execute(create_sql)
-        
+
         return self.compute_pool
 
     def ensure_image_repo(self) -> str:
         full_repo = f"{self.database}.{self.schema}.{self.image_repo}"
-        
+
         create_sql = f"CREATE IMAGE REPOSITORY IF NOT EXISTS {full_repo}"
         self._execute(create_sql)
-        
+
         return full_repo
 
     def get_image_registry_url(self) -> str:
         show_sql = f"SHOW IMAGE REPOSITORIES LIKE '{self.image_repo}' IN SCHEMA {self.database}.{self.schema}"
         results = self._execute(show_sql)
-        
+
         if results:
             return results[0].get("repository_url", "")
         return ""
@@ -125,36 +127,40 @@ class SPCSDeployer:
         service_name: str,
         image_tag: str,
         port: int = 8080,
-        env_vars: Optional[Dict[str, str]] = None,
+        env_vars: dict[str, str] | None = None,
         min_instances: int = 1,
         max_instances: int = 1,
     ) -> str:
         self._state = DeploymentState.CREATING_SERVICE
-        
+
         full_service = f"{self.database}.{self.schema}.{service_name}"
-        
+
         env_vars = env_vars or {}
-        env_vars.update({
-            "SNOWFLAKE_ACCOUNT": "{{ context().CURRENT_ACCOUNT }}",
-            "SNOWFLAKE_HOST": "{{ context().CURRENT_HOST }}",
-        })
-        
-        env_section = ",\n                    ".join(
-            [f'"{k}": "{v}"' for k, v in env_vars.items()]
+        env_vars.update(
+            {
+                "SNOWFLAKE_ACCOUNT": "{{ context().CURRENT_ACCOUNT }}",
+                "SNOWFLAKE_HOST": "{{ context().CURRENT_HOST }}",
+            }
         )
+
+        ",\n                    ".join([f'"{k}": "{v}"' for k, v in env_vars.items()])
 
         service_spec = {
             "spec": {
-                "containers": [{
-                    "name": service_name.lower(),
-                    "image": image_tag,
-                    "env": env_vars,
-                }],
-                "endpoints": [{
-                    "name": "app",
-                    "port": port,
-                    "public": True,
-                }],
+                "containers": [
+                    {
+                        "name": service_name.lower(),
+                        "image": image_tag,
+                        "env": env_vars,
+                    }
+                ],
+                "endpoints": [
+                    {
+                        "name": "app",
+                        "port": port,
+                        "public": True,
+                    }
+                ],
             }
         }
 
@@ -182,12 +188,12 @@ class SPCSDeployer:
         poll_interval: int = 10,
     ) -> bool:
         self._state = DeploymentState.WAITING_READY
-        
-        if '.' not in service_name:
+
+        if "." not in service_name:
             service_name = f"{self.database}.{self.schema}.{service_name}"
 
         start_time = time.time()
-        
+
         while time.time() - start_time < timeout_seconds:
             show_sql = f"DESCRIBE SERVICE {service_name}"
             try:
@@ -200,13 +206,13 @@ class SPCSDeployer:
                         return False
             except Exception:
                 pass
-            
+
             time.sleep(poll_interval)
 
         return False
 
-    def get_endpoint_url(self, service_name: str) -> Optional[str]:
-        if '.' not in service_name:
+    def get_endpoint_url(self, service_name: str) -> str | None:
+        if "." not in service_name:
             service_name = f"{self.database}.{self.schema}.{service_name}"
 
         show_sql = f"SHOW ENDPOINTS IN SERVICE {service_name}"
@@ -269,7 +275,7 @@ class SPCSDeployer:
             )
 
     def stop_service(self, service_name: str) -> bool:
-        if '.' not in service_name:
+        if "." not in service_name:
             service_name = f"{self.database}.{self.schema}.{service_name}"
 
         try:
@@ -279,7 +285,7 @@ class SPCSDeployer:
             return False
 
     def delete_service(self, service_name: str) -> bool:
-        if '.' not in service_name:
+        if "." not in service_name:
             service_name = f"{self.database}.{self.schema}.{service_name}"
 
         try:
@@ -288,7 +294,7 @@ class SPCSDeployer:
         except Exception:
             return False
 
-    def list_services(self) -> List[Dict[str, Any]]:
+    def list_services(self) -> list[dict[str, Any]]:
         sql = f"SHOW SERVICES IN SCHEMA {self.database}.{self.schema}"
         try:
             return self._execute(sql)
@@ -296,7 +302,7 @@ class SPCSDeployer:
             return []
 
 
-def deploy_to_spcs(state: Dict[str, Any]) -> Dict[str, Any]:
+def deploy_to_spcs(state: dict[str, Any]) -> dict[str, Any]:
     """LangGraph node function for SPCS deployment."""
     deployer = SPCSDeployer()
 
@@ -320,8 +326,11 @@ def deploy_to_spcs(state: Dict[str, Any]) -> Dict[str, Any]:
         "deployment_result": result.to_dict(),
         "endpoint_url": result.endpoint_url,
         "current_state": deployer._state.value,
-        "messages": state.get("messages", []) + [{
-            "role": "system",
-            "content": f"Deployment {result.status.value}: {result.service_name}",
-        }],
+        "messages": state.get("messages", [])
+        + [
+            {
+                "role": "system",
+                "content": f"Deployment {result.status.value}: {result.service_name}",
+            }
+        ],
     }

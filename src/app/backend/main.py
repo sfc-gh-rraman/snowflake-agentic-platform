@@ -1,9 +1,10 @@
 """FastAPI backend for Orchestrator UI with dynamic plan execution."""
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import os
 
 app = FastAPI(title="Agentic Platform Orchestrator API")
 
@@ -15,7 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from .routes import plans, dashboard, logs
+from .routes import dashboard, logs, plans
 
 app.include_router(plans.router, prefix="/api/plans", tags=["Plans"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])

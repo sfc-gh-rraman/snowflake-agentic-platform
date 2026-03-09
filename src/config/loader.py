@@ -3,62 +3,61 @@
 Loads and validates use case configurations from YAML files.
 """
 
-import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import yaml
 
 from .use_case_schema import UseCaseConfig
 
 
-def load_use_case_yaml(path: Union[str, Path]) -> UseCaseConfig:
+def load_use_case_yaml(path: str | Path) -> UseCaseConfig:
     """Load a use case configuration from a YAML file.
-    
+
     Args:
         path: Path to the YAML file
-        
+
     Returns:
         Validated UseCaseConfig instance
-        
+
     Raises:
         FileNotFoundError: If the file doesn't exist
         yaml.YAMLError: If the YAML is invalid
         pydantic.ValidationError: If the config doesn't match the schema
     """
     path = Path(path)
-    
+
     if not path.exists():
         raise FileNotFoundError(f"Use case config not found: {path}")
-    
-    with open(path, 'r') as f:
+
+    with open(path) as f:
         data = yaml.safe_load(f)
-    
+
     return UseCaseConfig(**data)
 
 
-def save_use_case_yaml(config: UseCaseConfig, path: Union[str, Path]) -> None:
+def save_use_case_yaml(config: UseCaseConfig, path: str | Path) -> None:
     """Save a use case configuration to a YAML file.
-    
+
     Args:
         config: UseCaseConfig instance to save
         path: Path to save the YAML file
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    
-    data = config.model_dump(mode='json', exclude_none=True)
-    
-    with open(path, 'w') as f:
+
+    data = config.model_dump(mode="json", exclude_none=True)
+
+    with open(path, "w") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
 
 def get_template_path(template_name: str) -> Path:
     """Get the path to a built-in template.
-    
+
     Args:
         template_name: Name of the template (e.g., "drilling_ops")
-        
+
     Returns:
         Path to the template YAML file
     """
@@ -68,24 +67,24 @@ def get_template_path(template_name: str) -> Path:
 
 def list_templates() -> list[str]:
     """List available built-in templates.
-    
+
     Returns:
         List of template names (without .yaml extension)
     """
     templates_dir = Path(__file__).parent.parent.parent / "config" / "templates"
-    
+
     if not templates_dir.exists():
         return []
-    
+
     return [f.stem for f in templates_dir.glob("*.yaml")]
 
 
 def load_template(template_name: str) -> UseCaseConfig:
     """Load a built-in template.
-    
+
     Args:
         template_name: Name of the template (e.g., "drilling_ops")
-        
+
     Returns:
         UseCaseConfig instance from the template
     """
@@ -93,9 +92,9 @@ def load_template(template_name: str) -> UseCaseConfig:
     return load_use_case_yaml(path)
 
 
-def create_blank_template() -> Dict[str, Any]:
+def create_blank_template() -> dict[str, Any]:
     """Create a blank template dictionary for users to fill in.
-    
+
     Returns:
         Dictionary with the structure of a use case config
     """
@@ -104,7 +103,7 @@ def create_blank_template() -> Dict[str, Any]:
         "domain": {
             "name": "YOUR_DOMAIN_NAME",
             "industry": "manufacturing",  # Options: oil_gas, manufacturing, healthcare, etc.
-            "description": "Describe your use case in detail (minimum 50 characters)"
+            "description": "Describe your use case in detail (minimum 50 characters)",
         },
         "personas": [
             {
@@ -114,7 +113,7 @@ def create_blank_template() -> Dict[str, Any]:
                     "Real-time monitoring",
                     "Alert notifications",
                 ],
-                "primary_page": "Command Center"
+                "primary_page": "Command Center",
             }
         ],
         "snowflake": {
@@ -134,7 +133,7 @@ def create_blank_template() -> Dict[str, Any]:
                     "measures": ["metric1", "metric2"],
                 }
             ],
-            "unstructured": []
+            "unstructured": [],
         },
         "agents": [
             {
@@ -147,27 +146,18 @@ def create_blank_template() -> Dict[str, Any]:
         "ml_models": [],
         "app": {
             "name": "Your Application Name",
-            "pages": [
-                {
-                    "name": "Dashboard",
-                    "route": "/",
-                    "layout": "dashboard",
-                    "components": []
-                }
-            ],
-            "deployment": {
-                "target": "spcs"
-            }
-        }
+            "pages": [{"name": "Dashboard", "route": "/", "layout": "dashboard", "components": []}],
+            "deployment": {"target": "spcs"},
+        },
     }
 
 
-def validate_yaml_file(path: Union[str, Path]) -> tuple[bool, Optional[str]]:
+def validate_yaml_file(path: str | Path) -> tuple[bool, str | None]:
     """Validate a YAML file against the use case schema.
-    
+
     Args:
         path: Path to the YAML file
-        
+
     Returns:
         Tuple of (is_valid, error_message)
     """

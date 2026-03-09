@@ -2,7 +2,7 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -10,16 +10,16 @@ class ColumnProfile:
     name: str
     data_type: str
     nullable: bool
-    distinct_count: Optional[int] = None
-    null_count: Optional[int] = None
-    null_percentage: Optional[float] = None
-    min_value: Optional[Any] = None
-    max_value: Optional[Any] = None
-    avg_value: Optional[float] = None
-    sample_values: List[Any] = field(default_factory=list)
-    semantic_type: Optional[str] = None
+    distinct_count: int | None = None
+    null_count: int | None = None
+    null_percentage: float | None = None
+    min_value: Any | None = None
+    max_value: Any | None = None
+    avg_value: float | None = None
+    sample_values: list[Any] = field(default_factory=list)
+    semantic_type: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "data_type": self.data_type,
@@ -35,7 +35,7 @@ class ColumnProfile:
         }
 
 
-@dataclass 
+@dataclass
 class TableProfile:
     table_name: str
     database: str
@@ -43,13 +43,13 @@ class TableProfile:
     row_count: int
     column_count: int
     size_bytes: int
-    columns: List[ColumnProfile]
-    primary_key_candidates: List[str] = field(default_factory=list)
-    timestamp_columns: List[str] = field(default_factory=list)
-    text_columns: List[str] = field(default_factory=list)
-    numeric_columns: List[str] = field(default_factory=list)
+    columns: list[ColumnProfile]
+    primary_key_candidates: list[str] = field(default_factory=list)
+    timestamp_columns: list[str] = field(default_factory=list)
+    text_columns: list[str] = field(default_factory=list)
+    numeric_columns: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "table_name": self.table_name,
             "database": self.database,
@@ -70,7 +70,7 @@ class SchemaProfiler:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         database: str = "AGENTIC_PLATFORM",
     ):
         self.connection_name = connection_name or os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
@@ -86,14 +86,16 @@ class SchemaProfiler:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
-    def _execute(self, sql: str) -> List[Dict]:
-        if hasattr(self.session, 'sql'):
+    def _execute(self, sql: str) -> list[dict]:
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -108,7 +110,7 @@ class SchemaProfiler:
                 cursor.close()
 
     def _parse_table_name(self, table_name: str) -> tuple:
-        parts = table_name.split('.')
+        parts = table_name.split(".")
         if len(parts) == 3:
             return parts[0], parts[1], parts[2]
         elif len(parts) == 2:
@@ -116,30 +118,34 @@ class SchemaProfiler:
         else:
             return self.database, "RAW", parts[0]
 
-    def _detect_semantic_type(self, col_name: str, data_type: str) -> Optional[str]:
+    def _detect_semantic_type(self, col_name: str, data_type: str) -> str | None:
         col_lower = col_name.lower()
-        
-        if any(x in col_lower for x in ['email', 'mail']):
+
+        if any(x in col_lower for x in ["email", "mail"]):
             return "email"
-        elif any(x in col_lower for x in ['phone', 'tel', 'mobile']):
+        elif any(x in col_lower for x in ["phone", "tel", "mobile"]):
             return "phone"
-        elif any(x in col_lower for x in ['url', 'link', 'website']):
+        elif any(x in col_lower for x in ["url", "link", "website"]):
             return "url"
-        elif any(x in col_lower for x in ['address', 'street', 'city', 'state', 'zip', 'country']):
+        elif any(x in col_lower for x in ["address", "street", "city", "state", "zip", "country"]):
             return "address"
-        elif any(x in col_lower for x in ['date', 'time', 'timestamp', 'created', 'updated', 'modified']):
+        elif any(
+            x in col_lower for x in ["date", "time", "timestamp", "created", "updated", "modified"]
+        ):
             return "datetime"
-        elif any(x in col_lower for x in ['id', 'key', 'uuid', 'guid']):
+        elif any(x in col_lower for x in ["id", "key", "uuid", "guid"]):
             return "identifier"
-        elif any(x in col_lower for x in ['price', 'cost', 'amount', 'total', 'revenue']):
+        elif any(x in col_lower for x in ["price", "cost", "amount", "total", "revenue"]):
             return "currency"
-        elif any(x in col_lower for x in ['lat', 'lng', 'longitude', 'latitude', 'geo']):
+        elif any(x in col_lower for x in ["lat", "lng", "longitude", "latitude", "geo"]):
             return "geographic"
-        elif any(x in col_lower for x in ['name', 'title', 'description', 'comment', 'note', 'text']):
+        elif any(
+            x in col_lower for x in ["name", "title", "description", "comment", "note", "text"]
+        ):
             return "text"
-        elif any(x in col_lower for x in ['status', 'state', 'type', 'category', 'class']):
+        elif any(x in col_lower for x in ["status", "state", "type", "category", "class"]):
             return "category"
-        
+
         return None
 
     def profile_table(self, table_name: str, sample_size: int = 1000) -> TableProfile:
@@ -152,7 +158,7 @@ class SchemaProfiler:
             WHERE TABLE_SCHEMA = '{schema}' AND TABLE_NAME = '{table}'
         """
         meta_results = self._execute(meta_sql)
-        
+
         row_count = meta_results[0].get("ROW_COUNT", 0) if meta_results else 0
         size_bytes = meta_results[0].get("BYTES", 0) if meta_results else 0
 
@@ -185,7 +191,7 @@ class SchemaProfiler:
             if row_count > 0:
                 try:
                     stats_sql = f"""
-                        SELECT 
+                        SELECT
                             COUNT(DISTINCT "{col_name}") as distinct_count,
                             SUM(CASE WHEN "{col_name}" IS NULL THEN 1 ELSE 0 END) as null_count
                         FROM {full_table}
@@ -195,7 +201,9 @@ class SchemaProfiler:
                     if stats:
                         profile.distinct_count = stats[0].get("DISTINCT_COUNT", 0)
                         profile.null_count = stats[0].get("NULL_COUNT", 0)
-                        profile.null_percentage = (profile.null_count / sample_size * 100) if sample_size > 0 else 0
+                        profile.null_percentage = (
+                            (profile.null_count / sample_size * 100) if sample_size > 0 else 0
+                        )
 
                     sample_sql = f"""
                         SELECT DISTINCT "{col_name}"
@@ -211,13 +219,22 @@ class SchemaProfiler:
 
             columns.append(profile)
 
-            if profile.semantic_type == "identifier" and profile.distinct_count and profile.distinct_count == row_count:
+            if (
+                profile.semantic_type == "identifier"
+                and profile.distinct_count
+                and profile.distinct_count == row_count
+            ):
                 pk_candidates.append(col_name)
-            if profile.semantic_type == "datetime" or 'TIME' in data_type or 'DATE' in data_type:
+            if profile.semantic_type == "datetime" or "TIME" in data_type or "DATE" in data_type:
                 timestamp_cols.append(col_name)
-            if 'VARCHAR' in data_type or 'TEXT' in data_type or 'STRING' in data_type:
+            if "VARCHAR" in data_type or "TEXT" in data_type or "STRING" in data_type:
                 text_cols.append(col_name)
-            if 'NUMBER' in data_type or 'INT' in data_type or 'FLOAT' in data_type or 'DOUBLE' in data_type:
+            if (
+                "NUMBER" in data_type
+                or "INT" in data_type
+                or "FLOAT" in data_type
+                or "DOUBLE" in data_type
+            ):
                 numeric_cols.append(col_name)
 
         return TableProfile(
@@ -234,19 +251,21 @@ class SchemaProfiler:
             numeric_columns=numeric_cols,
         )
 
-    def profile_parquet(self, stage_path: str) -> Dict[str, Any]:
-        if hasattr(self.session, 'read'):
+    def profile_parquet(self, stage_path: str) -> dict[str, Any]:
+        if hasattr(self.session, "read"):
             try:
                 df = self.session.read.parquet(stage_path)
                 schema = df.schema
-                
+
                 columns = []
                 for field in schema.fields:
-                    columns.append({
-                        "name": field.name,
-                        "data_type": str(field.datatype),
-                        "nullable": field.nullable,
-                    })
+                    columns.append(
+                        {
+                            "name": field.name,
+                            "data_type": str(field.datatype),
+                            "nullable": field.nullable,
+                        }
+                    )
 
                 return {
                     "path": stage_path,
@@ -255,17 +274,17 @@ class SchemaProfiler:
                 }
             except Exception as e:
                 return {"path": stage_path, "error": str(e)}
-        
+
         return {"path": stage_path, "error": "Snowpark session required for parquet profiling"}
 
 
-def profile_schema(state: Dict[str, Any]) -> Dict[str, Any]:
+def profile_schema(state: dict[str, Any]) -> dict[str, Any]:
     """LangGraph node function for schema profiling."""
     profiler = SchemaProfiler()
-    
+
     tables = state.get("tables_to_profile", [])
     parquet_files = state.get("parquet_files", [])
-    
+
     table_profiles = {}
     for table in tables:
         profile = profiler.profile_table(table)
@@ -280,8 +299,11 @@ def profile_schema(state: Dict[str, Any]) -> Dict[str, Any]:
         "table_profiles": table_profiles,
         "parquet_profiles": parquet_profiles,
         "current_state": "COMPLETE",
-        "messages": state.get("messages", []) + [{
-            "role": "system",
-            "content": f"Profiled {len(table_profiles)} tables and {len(parquet_profiles)} parquet files",
-        }],
+        "messages": state.get("messages", [])
+        + [
+            {
+                "role": "system",
+                "content": f"Profiled {len(table_profiles)} tables and {len(parquet_profiles)} parquet files",
+            }
+        ],
     }

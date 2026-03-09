@@ -1,11 +1,11 @@
 """Data models for Agent Registry."""
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-from enum import Enum
+from enum import StrEnum
+from typing import Any
 
 
-class AgentCategory(str, Enum):
+class AgentCategory(StrEnum):
     DISCOVERY = "discovery"
     PREPROCESSING = "preprocessing"
     VALIDATION = "validation"
@@ -17,7 +17,7 @@ class AgentCategory(str, Enum):
     OBSERVABILITY = "observability"
 
 
-class DependencyRelationship(str, Enum):
+class DependencyRelationship(StrEnum):
     REQUIRES = "requires"
     OPTIONAL = "optional"
     CONFLICTS = "conflicts"
@@ -27,31 +27,31 @@ class DependencyRelationship(str, Enum):
 class AgentCapability:
     capability_id: str
     name: str
-    input_types: List[str]
-    output_types: List[str]
-    description: Optional[str] = None
-    constraints: Optional[Dict[str, Any]] = None
+    input_types: list[str]
+    output_types: list[str]
+    description: str | None = None
+    constraints: dict[str, Any] | None = None
 
 
 @dataclass
 class AgentDependency:
     agent_id: str
     relationship: DependencyRelationship
-    description: Optional[str] = None
+    description: str | None = None
 
 
 @dataclass
 class AgentTrigger:
     condition: str
     priority: int
-    description: Optional[str] = None
+    description: str | None = None
 
 
 @dataclass
 class StateMachine:
-    states: List[str]
+    states: list[str]
     initial_state: str
-    transitions: List[Dict[str, str]]
+    transitions: list[dict[str, str]]
 
 
 @dataclass
@@ -61,13 +61,13 @@ class AgentDefinition:
     version: str
     description: str
     category: AgentCategory
-    capabilities: List[AgentCapability]
-    dependencies: List[AgentDependency] = field(default_factory=list)
-    triggers: List[AgentTrigger] = field(default_factory=list)
-    config_schema: Optional[Dict[str, Any]] = None
-    state_machine: Optional[StateMachine] = None
+    capabilities: list[AgentCapability]
+    dependencies: list[AgentDependency] = field(default_factory=list)
+    triggers: list[AgentTrigger] = field(default_factory=list)
+    config_schema: dict[str, Any] | None = None
+    state_machine: StateMachine | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "agent_id": self.agent_id,
             "name": self.name,
@@ -106,11 +106,13 @@ class AgentDefinition:
                 "states": self.state_machine.states,
                 "initial_state": self.state_machine.initial_state,
                 "transitions": self.state_machine.transitions,
-            } if self.state_machine else None,
+            }
+            if self.state_machine
+            else None,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AgentDefinition":
+    def from_dict(cls, data: dict[str, Any]) -> "AgentDefinition":
         capabilities = [
             AgentCapability(
                 capability_id=c["capability_id"],
@@ -170,6 +172,6 @@ class AgentSearchResult:
     agent_name: str
     capability_name: str
     score: float
-    input_types: List[str]
-    output_types: List[str]
-    full_definition: Dict[str, Any]
+    input_types: list[str]
+    output_types: list[str]
+    full_definition: dict[str, Any]

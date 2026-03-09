@@ -2,11 +2,11 @@
 
 import os
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 
-class FileType(str, Enum):
+class FileType(StrEnum):
     PARQUET = "parquet"
     CSV = "csv"
     JSON = "json"
@@ -25,10 +25,10 @@ class FileInfo:
     path: str
     size_bytes: int
     file_type: FileType
-    last_modified: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    last_modified: str | None = None
+    metadata: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "path": self.path,
@@ -44,7 +44,7 @@ class FileScanner:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         database: str = "AGENTIC_PLATFORM",
     ):
         self.connection_name = connection_name or os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
@@ -60,14 +60,16 @@ class FileScanner:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
-    def _execute(self, sql: str) -> List[Dict]:
-        if hasattr(self.session, 'sql'):
+    def _execute(self, sql: str) -> list[dict]:
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -82,29 +84,29 @@ class FileScanner:
                 cursor.close()
 
     def _detect_file_type(self, filename: str) -> FileType:
-        ext = filename.lower().split('.')[-1] if '.' in filename else ''
+        ext = filename.lower().split(".")[-1] if "." in filename else ""
         type_map = {
-            'parquet': FileType.PARQUET,
-            'csv': FileType.CSV,
-            'json': FileType.JSON,
-            'jsonl': FileType.JSON,
-            'pdf': FileType.PDF,
-            'docx': FileType.DOCX,
-            'doc': FileType.DOCX,
-            'txt': FileType.TXT,
-            'xml': FileType.XML,
-            'avro': FileType.AVRO,
-            'orc': FileType.ORC,
+            "parquet": FileType.PARQUET,
+            "csv": FileType.CSV,
+            "json": FileType.JSON,
+            "jsonl": FileType.JSON,
+            "pdf": FileType.PDF,
+            "docx": FileType.DOCX,
+            "doc": FileType.DOCX,
+            "txt": FileType.TXT,
+            "xml": FileType.XML,
+            "avro": FileType.AVRO,
+            "orc": FileType.ORC,
         }
         return type_map.get(ext, FileType.UNKNOWN)
 
     def scan_stage(
         self,
         stage_path: str,
-        pattern: Optional[str] = None,
+        pattern: str | None = None,
         include_subdirs: bool = True,
-    ) -> List[FileInfo]:
-        if not stage_path.startswith('@'):
+    ) -> list[FileInfo]:
+        if not stage_path.startswith("@"):
             stage_path = f"@{stage_path}"
 
         sql = f"LIST {stage_path}"
@@ -113,7 +115,7 @@ class FileScanner:
 
         try:
             results = self._execute(sql)
-        except Exception as e:
+        except Exception:
             return []
 
         files = []
@@ -122,35 +124,37 @@ class FileScanner:
             if not name:
                 continue
 
-            file_name = name.split('/')[-1]
+            file_name = name.split("/")[-1]
             file_type = self._detect_file_type(file_name)
 
-            files.append(FileInfo(
-                name=file_name,
-                path=f"{stage_path}/{name}",
-                size_bytes=row.get("size", 0),
-                file_type=file_type,
-                last_modified=str(row.get("last_modified", "")),
-                metadata={
-                    "md5": row.get("md5"),
-                    "etag": row.get("etag"),
-                },
-            ))
+            files.append(
+                FileInfo(
+                    name=file_name,
+                    path=f"{stage_path}/{name}",
+                    size_bytes=row.get("size", 0),
+                    file_type=file_type,
+                    last_modified=str(row.get("last_modified", "")),
+                    metadata={
+                        "md5": row.get("md5"),
+                        "etag": row.get("etag"),
+                    },
+                )
+            )
 
         return files
 
-    def scan_multiple_stages(self, stage_paths: List[str]) -> Dict[str, List[FileInfo]]:
+    def scan_multiple_stages(self, stage_paths: list[str]) -> dict[str, list[FileInfo]]:
         results = {}
         for stage_path in stage_paths:
             results[stage_path] = self.scan_stage(stage_path)
         return results
 
-    def get_file_inventory(self, stage_path: str) -> Dict[str, Any]:
+    def get_file_inventory(self, stage_path: str) -> dict[str, Any]:
         files = self.scan_stage(stage_path)
-        
+
         by_type = {}
         total_size = 0
-        
+
         for f in files:
             ft = f.file_type.value
             if ft not in by_type:
@@ -169,15 +173,15 @@ class FileScanner:
         }
 
 
-def scan_files(state: Dict[str, Any]) -> Dict[str, Any]:
+def scan_files(state: dict[str, Any]) -> dict[str, Any]:
     """LangGraph node function for file scanning."""
     scanner = FileScanner()
-    
+
     stage_paths = state.get("stage_paths", ["@RAW.DATA_STAGE", "@RAW.DOCUMENTS_STAGE"])
-    
+
     all_files = []
     inventories = {}
-    
+
     for stage_path in stage_paths:
         inventory = scanner.get_file_inventory(stage_path)
         inventories[stage_path] = inventory
@@ -187,8 +191,11 @@ def scan_files(state: Dict[str, Any]) -> Dict[str, Any]:
         "discovered_files": all_files,
         "file_inventories": inventories,
         "current_state": "COMPLETE",
-        "messages": state.get("messages", []) + [{
-            "role": "system",
-            "content": f"Discovered {len(all_files)} files across {len(stage_paths)} stages",
-        }],
+        "messages": state.get("messages", [])
+        + [
+            {
+                "role": "system",
+                "content": f"Discovered {len(all_files)} files across {len(stage_paths)} stages",
+            }
+        ],
     }

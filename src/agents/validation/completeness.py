@@ -1,17 +1,17 @@
 """Completeness validator - checks for required data coverage."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
 class CompletenessResult:
     passed: bool
-    checks: List[Dict[str, Any]]
+    checks: list[dict[str, Any]]
     score: float
-    issues: List[str]
+    issues: list[str]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "passed": self.passed,
             "checks": self.checks,
@@ -26,10 +26,10 @@ class CompletenessValidator:
     def __init__(self, session=None):
         self._session = session
 
-    def _execute(self, sql: str) -> List[Dict]:
+    def _execute(self, sql: str) -> list[dict]:
         if self._session is None:
             return []
-        if hasattr(self._session, 'sql'):
+        if hasattr(self._session, "sql"):
             result = self._session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -46,16 +46,16 @@ class CompletenessValidator:
     def check_required_columns(
         self,
         table_name: str,
-        required_columns: List[str],
-    ) -> Dict[str, Any]:
-        parts = table_name.split('.')
+        required_columns: list[str],
+    ) -> dict[str, Any]:
+        parts = table_name.split(".")
         if len(parts) == 3:
             db, schema, table = parts
         elif len(parts) == 2:
             db, schema, table = None, parts[0], parts[1]
         else:
             db, schema, table = None, None, parts[0]
-        
+
         info_schema = f"{db}.INFORMATION_SCHEMA" if db else "INFORMATION_SCHEMA"
         sql = f"""
             SELECT COLUMN_NAME
@@ -66,9 +66,9 @@ class CompletenessValidator:
         try:
             results = self._execute(sql)
             existing = {r.get("COLUMN_NAME", "").upper() for r in results}
-            
+
             missing = [c for c in required_columns if c.upper() not in existing]
-            
+
             return {
                 "check": "required_columns",
                 "passed": len(missing) == 0,
@@ -86,12 +86,12 @@ class CompletenessValidator:
         self,
         table_name: str,
         min_rows: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         sql = f"SELECT COUNT(*) as cnt FROM {table_name}"
         try:
             results = self._execute(sql)
             count = results[0].get("CNT", 0) if results else 0
-            
+
             return {
                 "check": "minimum_rows",
                 "passed": count >= min_rows,
@@ -108,14 +108,14 @@ class CompletenessValidator:
     def check_column_coverage(
         self,
         table_name: str,
-        columns: List[str],
+        columns: list[str],
         min_coverage: float = 0.9,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         coverage_results = {}
-        
+
         for col in columns:
             sql = f"""
-                SELECT 
+                SELECT
                     COUNT(*) as total,
                     SUM(CASE WHEN "{col}" IS NOT NULL THEN 1 ELSE 0 END) as non_null
                 FROM {table_name}
@@ -134,7 +134,11 @@ class CompletenessValidator:
                 coverage_results[col] = {"coverage": 0, "passed": False, "error": True}
 
         all_passed = all(r.get("passed", False) for r in coverage_results.values())
-        avg_coverage = sum(r.get("coverage", 0) for r in coverage_results.values()) / len(coverage_results) if coverage_results else 0
+        avg_coverage = (
+            sum(r.get("coverage", 0) for r in coverage_results.values()) / len(coverage_results)
+            if coverage_results
+            else 0
+        )
 
         return {
             "check": "column_coverage",
@@ -147,9 +151,9 @@ class CompletenessValidator:
     def validate(
         self,
         table_name: str,
-        required_columns: Optional[List[str]] = None,
+        required_columns: list[str] | None = None,
         min_rows: int = 1,
-        coverage_columns: Optional[List[str]] = None,
+        coverage_columns: list[str] | None = None,
         min_coverage: float = 0.9,
     ) -> CompletenessResult:
         checks = []
@@ -170,7 +174,9 @@ class CompletenessValidator:
             cov_check = self.check_column_coverage(table_name, coverage_columns, min_coverage)
             checks.append(cov_check)
             if not cov_check.get("passed"):
-                low_cov = [k for k, v in cov_check.get("columns", {}).items() if not v.get("passed")]
+                low_cov = [
+                    k for k, v in cov_check.get("columns", {}).items() if not v.get("passed")
+                ]
                 issues.append(f"Low coverage columns: {low_cov}")
 
         passed_count = sum(1 for c in checks if c.get("passed"))

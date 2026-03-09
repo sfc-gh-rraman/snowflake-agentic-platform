@@ -3,13 +3,13 @@
 import os
 import re
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from src.config import get_settings
 
 
-class DocumentChunkerState(str, Enum):
+class DocumentChunkerState(StrEnum):
     EXTRACT = "EXTRACT"
     ANALYZE_STRUCTURE = "ANALYZE_STRUCTURE"
     CHUNK = "CHUNK"
@@ -24,13 +24,13 @@ class DocumentChunk:
     chunk_id: str
     source_file: str
     document_type: str
-    page_number: Optional[int]
-    section_header: Optional[str]
+    page_number: int | None
+    section_header: str | None
     chunk_text: str
     chunk_index: int
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "chunk_id": self.chunk_id,
             "source_file": self.source_file,
@@ -48,9 +48,9 @@ class DocumentStructure:
     file_name: str
     document_type: str
     total_pages: int
-    sections: List[Dict[str, Any]]
+    sections: list[dict[str, Any]]
     extracted_text: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class DocumentChunker:
@@ -58,9 +58,9 @@ class DocumentChunker:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
-        database: Optional[str] = None,
-        schema: Optional[str] = None,
+        connection_name: str | None = None,
+        database: str | None = None,
+        schema: str | None = None,
         chunk_table: str = "DOCUMENT_CHUNKS",
         max_chunk_size: int = 8000,
         chunk_overlap: int = 200,
@@ -83,14 +83,16 @@ class DocumentChunker:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
-    def _execute(self, sql: str) -> List[Dict]:
-        if hasattr(self.session, 'sql'):
+    def _execute(self, sql: str) -> list[dict]:
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -105,11 +107,11 @@ class DocumentChunker:
                 cursor.close()
 
     def _detect_document_type(self, filename: str) -> str:
-        ext = filename.lower().split('.')[-1] if '.' in filename else ''
-        return ext if ext in ['pdf', 'docx', 'txt', 'md', 'html'] else 'unknown'
+        ext = filename.lower().split(".")[-1] if "." in filename else ""
+        return ext if ext in ["pdf", "docx", "txt", "md", "html"] else "unknown"
 
-    def extract(self, stage_path: str) -> List[Dict[str, Any]]:
-        if not stage_path.startswith('@'):
+    def extract(self, stage_path: str) -> list[dict[str, Any]]:
+        if not stage_path.startswith("@"):
             stage_path = f"@{stage_path}"
 
         sql = f"LIST {stage_path} PATTERN='.*\\.(pdf|docx|txt|md)'"
@@ -122,26 +124,28 @@ class DocumentChunker:
         for row in results:
             name = row.get("name", "")
             if name:
-                documents.append({
-                    "path": f"{stage_path}/{name}",
-                    "name": name.split('/')[-1],
-                    "size_bytes": row.get("size", 0),
-                    "document_type": self._detect_document_type(name),
-                })
+                documents.append(
+                    {
+                        "path": f"{stage_path}/{name}",
+                        "name": name.split("/")[-1],
+                        "size_bytes": row.get("size", 0),
+                        "document_type": self._detect_document_type(name),
+                    }
+                )
 
         return documents
 
-    def analyze_structure(self, text: str) -> List[Dict[str, Any]]:
+    def analyze_structure(self, text: str) -> list[dict[str, Any]]:
         sections = []
-        
+
         header_patterns = [
-            (r'^#{1,6}\s+(.+)$', 'markdown'),
-            (r'^([A-Z][A-Z\s]+):?\s*$', 'caps_header'),
-            (r'^(\d+\.?\d*\.?\d*)\s+(.+)$', 'numbered'),
-            (r'^([IVXLCDM]+\.)\s+(.+)$', 'roman'),
+            (r"^#{1,6}\s+(.+)$", "markdown"),
+            (r"^([A-Z][A-Z\s]+):?\s*$", "caps_header"),
+            (r"^(\d+\.?\d*\.?\d*)\s+(.+)$", "numbered"),
+            (r"^([IVXLCDM]+\.)\s+(.+)$", "roman"),
         ]
 
-        lines = text.split('\n')
+        lines = text.split("\n")
         current_section = None
         current_content = []
 
@@ -153,63 +157,67 @@ class DocumentChunker:
                 match = re.match(pattern, line.strip(), re.MULTILINE)
                 if match:
                     is_header = True
-                    header_text = match.group(1) if header_type != 'numbered' else match.group(2)
+                    header_text = match.group(1) if header_type != "numbered" else match.group(2)
                     break
 
             if is_header and header_text:
                 if current_section:
-                    current_section['content'] = '\n'.join(current_content)
-                    current_section['end_line'] = i - 1
+                    current_section["content"] = "\n".join(current_content)
+                    current_section["end_line"] = i - 1
                     sections.append(current_section)
                     current_content = []
 
                 current_section = {
-                    'header': header_text.strip(),
-                    'start_line': i,
-                    'content': '',
+                    "header": header_text.strip(),
+                    "start_line": i,
+                    "content": "",
                 }
             else:
                 current_content.append(line)
 
         if current_section:
-            current_section['content'] = '\n'.join(current_content)
-            current_section['end_line'] = len(lines) - 1
+            current_section["content"] = "\n".join(current_content)
+            current_section["end_line"] = len(lines) - 1
             sections.append(current_section)
 
         if not sections:
-            sections.append({
-                'header': 'Document',
-                'start_line': 0,
-                'end_line': len(lines) - 1,
-                'content': text,
-            })
+            sections.append(
+                {
+                    "header": "Document",
+                    "start_line": 0,
+                    "end_line": len(lines) - 1,
+                    "content": text,
+                }
+            )
 
         return sections
 
-    def chunk(self, text: str, source_file: str, document_type: str) -> List[DocumentChunk]:
+    def chunk(self, text: str, source_file: str, document_type: str) -> list[DocumentChunk]:
         chunks = []
         chunk_index = 0
 
         sections = self.analyze_structure(text)
 
         for section in sections:
-            section_text = section.get('content', '')
-            section_header = section.get('header', '')
+            section_text = section.get("content", "")
+            section_header = section.get("header", "")
 
             if len(section_text) <= self.max_chunk_size:
                 if section_text.strip():
-                    chunks.append(DocumentChunk(
-                        chunk_id=f"{source_file}_{chunk_index}",
-                        source_file=source_file,
-                        document_type=document_type,
-                        page_number=None,
-                        section_header=section_header,
-                        chunk_text=section_text.strip(),
-                        chunk_index=chunk_index,
-                    ))
+                    chunks.append(
+                        DocumentChunk(
+                            chunk_id=f"{source_file}_{chunk_index}",
+                            source_file=source_file,
+                            document_type=document_type,
+                            page_number=None,
+                            section_header=section_header,
+                            chunk_text=section_text.strip(),
+                            chunk_index=chunk_index,
+                        )
+                    )
                     chunk_index += 1
             else:
-                paragraphs = re.split(r'\n\s*\n', section_text)
+                paragraphs = re.split(r"\n\s*\n", section_text)
                 current_chunk = []
                 current_length = 0
 
@@ -219,8 +227,33 @@ class DocumentChunker:
                         continue
 
                     if current_length + len(para) > self.max_chunk_size and current_chunk:
-                        chunk_text = '\n\n'.join(current_chunk)
-                        chunks.append(DocumentChunk(
+                        chunk_text = "\n\n".join(current_chunk)
+                        chunks.append(
+                            DocumentChunk(
+                                chunk_id=f"{source_file}_{chunk_index}",
+                                source_file=source_file,
+                                document_type=document_type,
+                                page_number=None,
+                                section_header=section_header,
+                                chunk_text=chunk_text,
+                                chunk_index=chunk_index,
+                            )
+                        )
+                        chunk_index += 1
+
+                        overlap_text = current_chunk[-1] if current_chunk else ""
+                        current_chunk = (
+                            [overlap_text] if len(overlap_text) <= self.chunk_overlap else []
+                        )
+                        current_length = len(overlap_text) if current_chunk else 0
+
+                    current_chunk.append(para)
+                    current_length += len(para)
+
+                if current_chunk:
+                    chunk_text = "\n\n".join(current_chunk)
+                    chunks.append(
+                        DocumentChunk(
                             chunk_id=f"{source_file}_{chunk_index}",
                             source_file=source_file,
                             document_type=document_type,
@@ -228,40 +261,23 @@ class DocumentChunker:
                             section_header=section_header,
                             chunk_text=chunk_text,
                             chunk_index=chunk_index,
-                        ))
-                        chunk_index += 1
-
-                        overlap_text = current_chunk[-1] if current_chunk else ""
-                        current_chunk = [overlap_text] if len(overlap_text) <= self.chunk_overlap else []
-                        current_length = len(overlap_text) if current_chunk else 0
-
-                    current_chunk.append(para)
-                    current_length += len(para)
-
-                if current_chunk:
-                    chunk_text = '\n\n'.join(current_chunk)
-                    chunks.append(DocumentChunk(
-                        chunk_id=f"{source_file}_{chunk_index}",
-                        source_file=source_file,
-                        document_type=document_type,
-                        page_number=None,
-                        section_header=section_header,
-                        chunk_text=chunk_text,
-                        chunk_index=chunk_index,
-                    ))
+                        )
+                    )
                     chunk_index += 1
 
         return chunks
 
-    def enrich_metadata(self, chunk: DocumentChunk, doc_metadata: Dict[str, Any]) -> DocumentChunk:
-        chunk.metadata.update({
-            "document_metadata": doc_metadata,
-            "char_count": len(chunk.chunk_text),
-            "word_count": len(chunk.chunk_text.split()),
-        })
+    def enrich_metadata(self, chunk: DocumentChunk, doc_metadata: dict[str, Any]) -> DocumentChunk:
+        chunk.metadata.update(
+            {
+                "document_metadata": doc_metadata,
+                "char_count": len(chunk.chunk_text),
+                "word_count": len(chunk.chunk_text.split()),
+            }
+        )
         return chunk
 
-    def load_chunks(self, chunks: List[DocumentChunk]) -> int:
+    def load_chunks(self, chunks: list[DocumentChunk]) -> int:
         full_table = f"{self.database}.{self.schema}.{self.chunk_table}"
 
         create_sql = f"""
@@ -284,18 +300,19 @@ class DocumentChunker:
             escaped_text = chunk.chunk_text.replace("'", "''")
             escaped_header = (chunk.section_header or "").replace("'", "''")
             escaped_file = chunk.source_file.replace("'", "''")
-            
+
             import json
+
             metadata_json = json.dumps(chunk.metadata).replace("'", "''")
 
             insert_sql = f"""
-                INSERT INTO {full_table} 
+                INSERT INTO {full_table}
                 (chunk_id, source_file, document_type, page_number, section_header, chunk, chunk_index, metadata)
-                SELECT 
+                SELECT
                     '{chunk.chunk_id}',
                     '{escaped_file}',
                     '{chunk.document_type}',
-                    {chunk.page_number or 'NULL'},
+                    {chunk.page_number or "NULL"},
                     '{escaped_header}',
                     '{escaped_text[:16000]}',
                     {chunk.chunk_index},
@@ -310,7 +327,7 @@ class DocumentChunker:
 
         return loaded
 
-    def process(self, stage_path: str, sample_text: Optional[str] = None) -> Dict[str, Any]:
+    def process(self, stage_path: str, sample_text: str | None = None) -> dict[str, Any]:
         result = {
             "stage_path": stage_path,
             "documents_processed": 0,
@@ -323,8 +340,8 @@ class DocumentChunker:
         for doc in documents:
             try:
                 doc_text = sample_text or f"Sample content from {doc['name']}"
-                
-                chunks = self.chunk(doc_text, doc['name'], doc['document_type'])
+
+                chunks = self.chunk(doc_text, doc["name"], doc["document_type"])
 
                 for chunk in chunks:
                     chunk = self.enrich_metadata(chunk, doc)
@@ -335,15 +352,17 @@ class DocumentChunker:
                 result["chunks_created"] += loaded
 
             except Exception as e:
-                result["errors"].append({
-                    "document": doc['name'],
-                    "error": str(e),
-                })
+                result["errors"].append(
+                    {
+                        "document": doc["name"],
+                        "error": str(e),
+                    }
+                )
 
         return result
 
 
-def process_documents(state: Dict[str, Any]) -> Dict[str, Any]:
+def process_documents(state: dict[str, Any]) -> dict[str, Any]:
     """LangGraph node function for document chunking."""
     chunker = DocumentChunker(
         max_chunk_size=state.get("max_chunk_size", 8000),
@@ -368,8 +387,11 @@ def process_documents(state: Dict[str, Any]) -> Dict[str, Any]:
         "chunk_results": all_results,
         "current_state": DocumentChunkerState.COMPLETE.value,
         "chunk_table": f"{chunker.database}.{chunker.schema}.{chunker.chunk_table}",
-        "messages": state.get("messages", []) + [{
-            "role": "system",
-            "content": f"Processed {all_results['documents_processed']} documents, created {all_results['chunks_created']} chunks",
-        }],
+        "messages": state.get("messages", [])
+        + [
+            {
+                "role": "system",
+                "content": f"Processed {all_results['documents_processed']} documents, created {all_results['chunks_created']} chunks",
+            }
+        ],
     }

@@ -10,12 +10,13 @@ going far beyond simple "predict X from Y" to capture:
 - Full application UI/UX requirements
 """
 
-from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from enum import StrEnum
+from typing import Any
+
 from pydantic import BaseModel, Field, field_validator
 
 
-class Industry(str, Enum):
+class Industry(StrEnum):
     OIL_GAS = "oil_gas"
     MANUFACTURING = "manufacturing"
     HEALTHCARE = "healthcare"
@@ -27,7 +28,7 @@ class Industry(str, Enum):
     OTHER = "other"
 
 
-class DataType(str, Enum):
+class DataType(StrEnum):
     TIME_SERIES = "time_series"
     EVENT = "event"
     TRANSACTIONAL = "transactional"
@@ -36,7 +37,7 @@ class DataType(str, Enum):
     SURVEY = "survey"
 
 
-class DocumentType(str, Enum):
+class DocumentType(StrEnum):
     PDF = "pdf"
     DOCX = "docx"
     TXT = "txt"
@@ -45,7 +46,7 @@ class DocumentType(str, Enum):
     MIXED = "mixed"
 
 
-class AgentType(str, Enum):
+class AgentType(StrEnum):
     WATCHDOG = "watchdog"
     HISTORIAN = "historian"
     ADVISOR = "advisor"
@@ -54,7 +55,7 @@ class AgentType(str, Enum):
     CUSTOM = "custom"
 
 
-class MLTaskType(str, Enum):
+class MLTaskType(StrEnum):
     BINARY_CLASSIFICATION = "binary_classification"
     MULTI_CLASS_CLASSIFICATION = "multi_class_classification"
     REGRESSION = "regression"
@@ -63,7 +64,7 @@ class MLTaskType(str, Enum):
     CLUSTERING = "clustering"
 
 
-class ComponentType(str, Enum):
+class ComponentType(StrEnum):
     LIVE_GAUGES = "live_gauges"
     ALERT_FEED = "alert_feed"
     CHAT = "chat"
@@ -78,7 +79,7 @@ class ComponentType(str, Enum):
     PARAMETER_COMPARISON = "parameter_comparison"
 
 
-class PageLayout(str, Enum):
+class PageLayout(StrEnum):
     COMMAND_CENTER = "command_center"
     FLEET_OVERVIEW = "fleet_overview"
     KNOWLEDGE_BASE = "knowledge_base"
@@ -88,52 +89,77 @@ class PageLayout(str, Enum):
 
 class Domain(BaseModel):
     """Domain context for the use case."""
-    name: str = Field(..., description="Human-readable domain name", examples=["Drilling Operations Intelligence"])
+
+    name: str = Field(
+        ..., description="Human-readable domain name", examples=["Drilling Operations Intelligence"]
+    )
     industry: Industry = Field(..., description="Industry vertical")
     description: str = Field(..., description="Detailed description of the domain and use case")
-    
-    @field_validator('description')
+
+    @field_validator("description")
     @classmethod
     def description_min_length(cls, v: str) -> str:
         if len(v) < 50:
-            raise ValueError('Description should be at least 50 characters to capture sufficient context')
+            raise ValueError(
+                "Description should be at least 50 characters to capture sufficient context"
+            )
         return v
 
 
 class PersonaNeed(BaseModel):
     """A specific need for a persona."""
+
     description: str
-    priority: int = Field(default=1, ge=1, le=3, description="1=critical, 2=important, 3=nice-to-have")
+    priority: int = Field(
+        default=1, ge=1, le=3, description="1=critical, 2=important, 3=nice-to-have"
+    )
 
 
 class Persona(BaseModel):
     """Target user persona."""
-    role: str = Field(..., description="Job title or role", examples=["Driller", "Plant Manager", "Quality Engineer"])
-    department: Optional[str] = Field(None, description="Department or team")
-    needs: List[str] = Field(..., min_length=1, description="What this persona needs from the system")
-    primary_page: Optional[str] = Field(None, description="Main page this persona will use")
+
+    role: str = Field(
+        ...,
+        description="Job title or role",
+        examples=["Driller", "Plant Manager", "Quality Engineer"],
+    )
+    department: str | None = Field(None, description="Department or team")
+    needs: list[str] = Field(
+        ..., min_length=1, description="What this persona needs from the system"
+    )
+    primary_page: str | None = Field(None, description="Main page this persona will use")
 
 
 class StructuredDataAsset(BaseModel):
     """Structured data source (tables, parquet, CSV)."""
+
     name: str = Field(..., description="Logical name for this dataset")
-    location: str = Field(..., description="Stage path or table name", examples=["@RAW.SENSOR_STAGE/*.parquet", "RAW.EVENTS"])
+    location: str = Field(
+        ...,
+        description="Stage path or table name",
+        examples=["@RAW.SENSOR_STAGE/*.parquet", "RAW.EVENTS"],
+    )
     data_type: DataType = Field(..., description="Type of data")
-    volume: Optional[str] = Field(None, description="Approximate volume", examples=["12.5M rows", "500K records"])
-    key_columns: List[str] = Field(default_factory=list, description="Primary/natural key columns")
-    time_column: Optional[str] = Field(None, description="Timestamp column for time-series data")
-    entity_column: Optional[str] = Field(None, description="Entity identifier column (well_id, machine_id, etc.)")
-    measures: List[str] = Field(default_factory=list, description="Numeric measure columns")
-    dimensions: List[str] = Field(default_factory=list, description="Categorical dimension columns")
-    label_column: Optional[str] = Field(None, description="Target/label column for ML")
+    volume: str | None = Field(
+        None, description="Approximate volume", examples=["12.5M rows", "500K records"]
+    )
+    key_columns: list[str] = Field(default_factory=list, description="Primary/natural key columns")
+    time_column: str | None = Field(None, description="Timestamp column for time-series data")
+    entity_column: str | None = Field(
+        None, description="Entity identifier column (well_id, machine_id, etc.)"
+    )
+    measures: list[str] = Field(default_factory=list, description="Numeric measure columns")
+    dimensions: list[str] = Field(default_factory=list, description="Categorical dimension columns")
+    label_column: str | None = Field(None, description="Target/label column for ML")
 
 
 class UnstructuredDataAsset(BaseModel):
     """Unstructured data source (documents, PDFs)."""
+
     name: str = Field(..., description="Logical name for this dataset")
     location: str = Field(..., description="Stage path", examples=["@RAW.REPORTS_STAGE/*.pdf"])
     doc_type: DocumentType = Field(..., description="Document format")
-    count: Optional[int] = Field(None, description="Approximate document count")
+    count: int | None = Field(None, description="Approximate document count")
     content_description: str = Field(..., description="What these documents contain")
     chunk_size: int = Field(default=512, description="Target chunk size for RAG")
     chunk_overlap: int = Field(default=50, description="Chunk overlap for context preservation")
@@ -141,10 +167,11 @@ class UnstructuredDataAsset(BaseModel):
 
 class DataAssets(BaseModel):
     """All data assets for the use case."""
-    structured: List[StructuredDataAsset] = Field(default_factory=list)
-    unstructured: List[UnstructuredDataAsset] = Field(default_factory=list)
-    
-    @field_validator('structured', 'unstructured')
+
+    structured: list[StructuredDataAsset] = Field(default_factory=list)
+    unstructured: list[UnstructuredDataAsset] = Field(default_factory=list)
+
+    @field_validator("structured", "unstructured")
     @classmethod
     def at_least_one_asset(cls, v: list, info) -> list:
         return v
@@ -152,77 +179,109 @@ class DataAssets(BaseModel):
 
 class AgentCapability(BaseModel):
     """A specific capability an agent provides."""
+
     name: str
     description: str
-    tools: List[str] = Field(default_factory=list, description="Cortex tools used")
+    tools: list[str] = Field(default_factory=list, description="Cortex tools used")
 
 
 class AgentSpec(BaseModel):
     """Specification for an agent in the multi-agent architecture."""
+
     name: str = Field(..., description="Agent name", examples=["Watchdog", "Historian", "Advisor"])
     agent_type: AgentType = Field(..., description="Agent archetype")
     purpose: str = Field(..., description="What this agent does")
-    capabilities: List[str] = Field(default_factory=list, description="List of capabilities")
-    tools: List[str] = Field(default_factory=list, description="Cortex/Snowflake tools", examples=["cortex_search", "cortex_analyst", "sql_query", "model_inference"])
-    triggers: List[str] = Field(default_factory=list, description="What triggers this agent", examples=["anomaly_detection", "user_query", "threshold_breach"])
-    alerts_on: List[str] = Field(default_factory=list, description="For watchdog: what conditions trigger alerts")
-    sources: List[str] = Field(default_factory=list, description="Data sources this agent accesses")
+    capabilities: list[str] = Field(default_factory=list, description="List of capabilities")
+    tools: list[str] = Field(
+        default_factory=list,
+        description="Cortex/Snowflake tools",
+        examples=["cortex_search", "cortex_analyst", "sql_query", "model_inference"],
+    )
+    triggers: list[str] = Field(
+        default_factory=list,
+        description="What triggers this agent",
+        examples=["anomaly_detection", "user_query", "threshold_breach"],
+    )
+    alerts_on: list[str] = Field(
+        default_factory=list, description="For watchdog: what conditions trigger alerts"
+    )
+    sources: list[str] = Field(default_factory=list, description="Data sources this agent accesses")
 
 
 class MLModelSpec(BaseModel):
     """Specification for an ML model."""
-    name: str = Field(..., description="Model name", examples=["stuck_pipe_predictor", "defect_classifier"])
+
+    name: str = Field(
+        ..., description="Model name", examples=["stuck_pipe_predictor", "defect_classifier"]
+    )
     task: MLTaskType = Field(..., description="ML task type")
     target: str = Field(..., description="Target column or variable")
-    features: List[str] = Field(default_factory=list, description="Feature columns (auto-detected if empty)")
-    source_table: Optional[str] = Field(None, description="Source table for training data")
+    features: list[str] = Field(
+        default_factory=list, description="Feature columns (auto-detected if empty)"
+    )
+    source_table: str | None = Field(None, description="Source table for training data")
     business_value: str = Field(..., description="Business impact of this model")
-    threshold: Optional[float] = Field(None, description="Decision threshold for classification")
-    retrain_schedule: Optional[str] = Field(None, description="Retraining schedule", examples=["weekly", "monthly"])
+    threshold: float | None = Field(None, description="Decision threshold for classification")
+    retrain_schedule: str | None = Field(
+        None, description="Retraining schedule", examples=["weekly", "monthly"]
+    )
 
 
 class UIComponent(BaseModel):
     """A UI component in a page."""
+
     component_type: ComponentType = Field(..., description="Type of component")
-    title: Optional[str] = Field(None, description="Component title")
-    metrics: List[str] = Field(default_factory=list, description="Metrics to display")
-    refresh_ms: Optional[int] = Field(None, description="Refresh interval in milliseconds")
-    source: Optional[str] = Field(None, description="Data source (agent, table, service)")
-    config: Dict[str, Any] = Field(default_factory=dict, description="Additional configuration")
+    title: str | None = Field(None, description="Component title")
+    metrics: list[str] = Field(default_factory=list, description="Metrics to display")
+    refresh_ms: int | None = Field(None, description="Refresh interval in milliseconds")
+    source: str | None = Field(None, description="Data source (agent, table, service)")
+    config: dict[str, Any] = Field(default_factory=dict, description="Additional configuration")
 
 
 class PageSpec(BaseModel):
     """Specification for an application page."""
+
     name: str = Field(..., description="Page name", examples=["Command Center", "Fleet Overview"])
     route: str = Field(..., description="URL route", examples=["/", "/fleet", "/search"])
     layout: PageLayout = Field(..., description="Page layout template")
-    description: Optional[str] = Field(None, description="What this page is for")
-    components: List[UIComponent] = Field(default_factory=list, description="Components on this page")
-    primary_for: List[str] = Field(default_factory=list, description="Which personas primarily use this page")
+    description: str | None = Field(None, description="What this page is for")
+    components: list[UIComponent] = Field(
+        default_factory=list, description="Components on this page"
+    )
+    primary_for: list[str] = Field(
+        default_factory=list, description="Which personas primarily use this page"
+    )
 
 
 class APIEndpoint(BaseModel):
     """API endpoint specification."""
+
     path: str = Field(..., description="API path", examples=["/api/chat", "/api/fleet/summary"])
     method: str = Field(default="GET", description="HTTP method")
-    handler: str = Field(..., description="Handler type", examples=["cortex_agent", "sql_query", "cortex_search", "model_inference"])
-    description: Optional[str] = Field(None)
-    config: Dict[str, Any] = Field(default_factory=dict)
+    handler: str = Field(
+        ...,
+        description="Handler type",
+        examples=["cortex_agent", "sql_query", "cortex_search", "model_inference"],
+    )
+    description: str | None = Field(None)
+    config: dict[str, Any] = Field(default_factory=dict)
 
 
 class RealTimeConfig(BaseModel):
     """Real-time/streaming configuration."""
+
     enabled: bool = Field(default=False)
     websocket: bool = Field(default=False)
     refresh_interval_ms: int = Field(default=2000, description="Default refresh interval")
-    parameters: List[str] = Field(default_factory=list, description="Parameters to stream")
+    parameters: list[str] = Field(default_factory=list, description="Parameters to stream")
 
 
 class DeploymentConfig(BaseModel):
     """Deployment configuration."""
+
     target: str = Field(default="spcs", description="Deployment target")
-    compute_pool: Optional[str] = Field(None, description="SPCS compute pool")
-    warehouse: Optional[str] = Field(None, description="Snowflake warehouse")
+    compute_pool: str | None = Field(None, description="SPCS compute pool")
+    warehouse: str | None = Field(None, description="Snowflake warehouse")
     auth: str = Field(default="oauth", description="Authentication method")
     min_instances: int = Field(default=1)
     max_instances: int = Field(default=1)
@@ -230,46 +289,54 @@ class DeploymentConfig(BaseModel):
 
 class AppSpec(BaseModel):
     """Full application specification."""
-    name: str = Field(..., description="Application name", examples=["Drilling Co-Pilot", "Quality Intelligence"])
-    description: Optional[str] = Field(None)
-    pages: List[PageSpec] = Field(default_factory=list)
-    api_endpoints: List[APIEndpoint] = Field(default_factory=list)
+
+    name: str = Field(
+        ..., description="Application name", examples=["Drilling Co-Pilot", "Quality Intelligence"]
+    )
+    description: str | None = Field(None)
+    pages: list[PageSpec] = Field(default_factory=list)
+    api_endpoints: list[APIEndpoint] = Field(default_factory=list)
     real_time: RealTimeConfig = Field(default_factory=RealTimeConfig)
     deployment: DeploymentConfig = Field(default_factory=DeploymentConfig)
 
 
 class CortexSearchService(BaseModel):
     """Cortex Search service specification."""
+
     name: str = Field(..., description="Service name")
     source: str = Field(..., description="Source data asset name")
     embedding_model: str = Field(default="e5-base-v2")
     chunk_column: str = Field(default="chunk_text")
-    columns_to_return: List[str] = Field(default_factory=list)
+    columns_to_return: list[str] = Field(default_factory=list)
 
 
 class CortexAnalystModel(BaseModel):
     """Cortex Analyst semantic model specification."""
+
     name: str = Field(..., description="Semantic model name")
-    tables: List[str] = Field(..., description="Tables to include")
-    verified_queries: List[Dict[str, str]] = Field(default_factory=list)
+    tables: list[str] = Field(..., description="Tables to include")
+    verified_queries: list[dict[str, str]] = Field(default_factory=list)
 
 
 class CortexAgentConfig(BaseModel):
     """Cortex Agent configuration."""
+
     name: str = Field(..., description="Agent name")
-    tools: List[str] = Field(default_factory=list, description="Tools available to agent")
-    system_prompt: Optional[str] = Field(None)
+    tools: list[str] = Field(default_factory=list, description="Tools available to agent")
+    system_prompt: str | None = Field(None)
 
 
 class CortexServices(BaseModel):
     """All Cortex services for the use case."""
-    search: List[CortexSearchService] = Field(default_factory=list)
-    analyst: List[CortexAnalystModel] = Field(default_factory=list)
-    agents: List[CortexAgentConfig] = Field(default_factory=list)
+
+    search: list[CortexSearchService] = Field(default_factory=list)
+    analyst: list[CortexAnalystModel] = Field(default_factory=list)
+    agents: list[CortexAgentConfig] = Field(default_factory=list)
 
 
 class SnowflakeConfig(BaseModel):
     """Snowflake connection and schema configuration."""
+
     database: str = Field(..., description="Target database")
     raw_schema: str = Field(default="RAW", description="Schema for raw data")
     curated_schema: str = Field(default="CURATED", description="Schema for curated data")
@@ -277,30 +344,37 @@ class SnowflakeConfig(BaseModel):
     docs_schema: str = Field(default="DOCS", description="Schema for document chunks")
     analytics_schema: str = Field(default="ANALYTICS", description="Schema for analytics views")
     cortex_schema: str = Field(default="CORTEX", description="Schema for Cortex services")
-    orchestrator_schema: str = Field(default="ORCHESTRATOR", description="Schema for orchestration state")
+    orchestrator_schema: str = Field(
+        default="ORCHESTRATOR", description="Schema for orchestration state"
+    )
 
 
 class UseCaseConfig(BaseModel):
     """Complete use case configuration.
-    
+
     This is the master schema that captures everything needed to generate
     a comprehensive AI application like PETRA.
     """
+
     version: str = Field(default="1.0", description="Schema version")
-    
+
     domain: Domain = Field(..., description="Domain context")
-    personas: List[Persona] = Field(..., min_length=1, description="Target user personas")
-    
+    personas: list[Persona] = Field(..., min_length=1, description="Target user personas")
+
     snowflake: SnowflakeConfig = Field(..., description="Snowflake configuration")
     data: DataAssets = Field(..., description="Data assets")
-    
-    agents: List[AgentSpec] = Field(default_factory=list, description="Multi-agent architecture")
-    ml_models: List[MLModelSpec] = Field(default_factory=list, description="ML model specifications")
-    
-    cortex_services: CortexServices = Field(default_factory=CortexServices, description="Cortex service configs")
+
+    agents: list[AgentSpec] = Field(default_factory=list, description="Multi-agent architecture")
+    ml_models: list[MLModelSpec] = Field(
+        default_factory=list, description="ML model specifications"
+    )
+
+    cortex_services: CortexServices = Field(
+        default_factory=CortexServices, description="Cortex service configs"
+    )
     app: AppSpec = Field(..., description="Application specification")
-    
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
     def has_real_time(self) -> bool:
         return self.app.real_time.enabled
@@ -311,12 +385,16 @@ class UseCaseConfig(BaseModel):
     def has_ml(self) -> bool:
         return len(self.ml_models) > 0
 
-    def get_watchdog_agents(self) -> List[AgentSpec]:
+    def get_watchdog_agents(self) -> list[AgentSpec]:
         return [a for a in self.agents if a.agent_type == AgentType.WATCHDOG]
 
-    def get_primary_structured_data(self) -> Optional[StructuredDataAsset]:
+    def get_primary_structured_data(self) -> StructuredDataAsset | None:
         time_series = [d for d in self.data.structured if d.data_type == DataType.TIME_SERIES]
-        return time_series[0] if time_series else (self.data.structured[0] if self.data.structured else None)
+        return (
+            time_series[0]
+            if time_series
+            else (self.data.structured[0] if self.data.structured else None)
+        )
 
 
 def create_drilling_ops_example() -> UseCaseConfig:
@@ -327,11 +405,11 @@ def create_drilling_ops_example() -> UseCaseConfig:
             name="Drilling Operations Intelligence",
             industry=Industry.OIL_GAS,
             description="""
-            An intelligent co-pilot that watches drilling operations, remembers everything 
-            that ever happened across 8 wells, proactively warns about potential issues 
-            like stuck pipe, explains why based on historical incidents, and suggests 
+            An intelligent co-pilot that watches drilling operations, remembers everything
+            that ever happened across 8 wells, proactively warns about potential issues
+            like stuck pipe, explains why based on historical incidents, and suggests
             optimal drilling parameters based on offset well analysis.
-            """
+            """,
         ),
         personas=[
             Persona(
@@ -342,7 +420,7 @@ def create_drilling_ops_example() -> UseCaseConfig:
                     "What should I do about this torque spike?",
                     "What happened last time at this depth?",
                 ],
-                primary_page="Command Center"
+                primary_page="Command Center",
             ),
             Persona(
                 role="Drilling Engineer",
@@ -352,7 +430,7 @@ def create_drilling_ops_example() -> UseCaseConfig:
                     "What parameters worked best for offset wells?",
                     "Generate the daily drilling report",
                 ],
-                primary_page="Fleet Overview"
+                primary_page="Fleet Overview",
             ),
             Persona(
                 role="Drilling Superintendent",
@@ -362,7 +440,7 @@ def create_drilling_ops_example() -> UseCaseConfig:
                     "What lessons have we learned?",
                     "Brief me for the morning meeting",
                 ],
-                primary_page="Toolbox Talk"
+                primary_page="Toolbox Talk",
             ),
         ],
         snowflake=SnowflakeConfig(
@@ -385,7 +463,15 @@ def create_drilling_ops_example() -> UseCaseConfig:
                     key_columns=["WELL_NAME", "TIMESTAMP"],
                     time_column="TIMESTAMP",
                     entity_column="WELL_NAME",
-                    measures=["ROP_M_HR", "WOB_KKGF", "RPM", "TORQUE_KNM", "SPP_KPA", "HOOKLOAD_KKGF", "MUD_FLOW_IN_LPM"],
+                    measures=[
+                        "ROP_M_HR",
+                        "WOB_KKGF",
+                        "RPM",
+                        "TORQUE_KNM",
+                        "SPP_KPA",
+                        "HOOKLOAD_KKGF",
+                        "MUD_FLOW_IN_LPM",
+                    ],
                     dimensions=["WELL_NAME"],
                     label_column="STUCK_PIPE_FLAG",
                 ),
@@ -396,7 +482,13 @@ def create_drilling_ops_example() -> UseCaseConfig:
                     volume="737K rows",
                     key_columns=["WELL_NAME", "MEASURED_DEPTH_M"],
                     entity_column="WELL_NAME",
-                    measures=["MEASURED_DEPTH_M", "TVD_M", "INCLINATION_DEG", "AZIMUTH_DEG", "D_EXPONENT"],
+                    measures=[
+                        "MEASURED_DEPTH_M",
+                        "TVD_M",
+                        "INCLINATION_DEG",
+                        "AZIMUTH_DEG",
+                        "D_EXPONENT",
+                    ],
                 ),
             ],
             unstructured=[
@@ -502,7 +594,12 @@ def create_drilling_ops_example() -> UseCaseConfig:
             analyst=[
                 CortexAnalystModel(
                     name="DRILLING_ANALYST",
-                    tables=["DRILLING_TIME", "DRILLING_DEPTH", "MODEL_METRICS", "FEATURE_IMPORTANCE"],
+                    tables=[
+                        "DRILLING_TIME",
+                        "DRILLING_DEPTH",
+                        "MODEL_METRICS",
+                        "FEATURE_IMPORTANCE",
+                    ],
                 ),
             ],
             agents=[
@@ -599,7 +696,11 @@ def create_drilling_ops_example() -> UseCaseConfig:
                             title="Daily Briefing",
                             config={
                                 "template": "toolbox_talk",
-                                "sources": ["recent_incidents", "current_conditions", "lessons_learned"],
+                                "sources": [
+                                    "recent_incidents",
+                                    "current_conditions",
+                                    "lessons_learned",
+                                ],
                             },
                         ),
                     ],
@@ -610,9 +711,13 @@ def create_drilling_ops_example() -> UseCaseConfig:
                 APIEndpoint(path="/api/chat", method="POST", handler="cortex_agent"),
                 APIEndpoint(path="/api/fleet/summary", method="GET", handler="sql_query"),
                 APIEndpoint(path="/api/fleet/days-vs-depth", method="GET", handler="sql_query"),
-                APIEndpoint(path="/api/fleet/well/{well_id}/timeseries", method="GET", handler="sql_query"),
+                APIEndpoint(
+                    path="/api/fleet/well/{well_id}/timeseries", method="GET", handler="sql_query"
+                ),
                 APIEndpoint(path="/api/search", method="POST", handler="cortex_search"),
-                APIEndpoint(path="/api/predict/stuck_pipe", method="POST", handler="model_inference"),
+                APIEndpoint(
+                    path="/api/predict/stuck_pipe", method="POST", handler="model_inference"
+                ),
                 APIEndpoint(path="/api/briefing/generate", method="POST", handler="cortex_llm"),
             ],
             real_time=RealTimeConfig(

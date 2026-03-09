@@ -1,26 +1,27 @@
 """LangGraph state machine for Parquet Processor agent."""
 
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Annotated
-from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.base import BaseCheckpointSaver
 import operator
+from typing import Annotated, Any, Literal, TypedDict
 
-from .parquet_processor import ParquetProcessor, ParquetFile, ParquetProcessorState
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.graph import END, StateGraph
+
+from .parquet_processor import ParquetFile, ParquetProcessor, ParquetProcessorState
 
 
 class ParquetGraphState(TypedDict):
     stage_path: str
     target_schema: str
     database: str
-    files: Annotated[List[Dict[str, Any]], operator.add]
-    schemas: Dict[str, Dict[str, str]]
-    profiles: Dict[str, Dict[str, Any]]
-    quality_issues: Dict[str, List[str]]
-    column_mappings: Dict[str, Dict[str, str]]
-    tables_created: Annotated[List[str], operator.add]
+    files: Annotated[list[dict[str, Any]], operator.add]
+    schemas: dict[str, dict[str, str]]
+    profiles: dict[str, dict[str, Any]]
+    quality_issues: dict[str, list[str]]
+    column_mappings: dict[str, dict[str, str]]
+    tables_created: Annotated[list[str], operator.add]
     current_state: str
-    errors: Annotated[List[str], operator.add]
-    messages: Annotated[List[Dict[str, str]], operator.add]
+    errors: Annotated[list[str], operator.add]
+    messages: Annotated[list[dict[str, str]], operator.add]
 
 
 def create_processor(state: ParquetGraphState) -> ParquetProcessor:
@@ -30,10 +31,10 @@ def create_processor(state: ParquetGraphState) -> ParquetProcessor:
     )
 
 
-def scan_node(state: ParquetGraphState) -> Dict[str, Any]:
+def scan_node(state: ParquetGraphState) -> dict[str, Any]:
     processor = create_processor(state)
     stage_path = state["stage_path"]
-    
+
     try:
         files = processor.scan(stage_path)
         file_dicts = [
@@ -47,7 +48,12 @@ def scan_node(state: ParquetGraphState) -> Dict[str, Any]:
         return {
             "files": file_dicts,
             "current_state": ParquetProcessorState.SCHEMA_INFER.value,
-            "messages": [{"role": "system", "content": f"SCAN: Found {len(files)} parquet files in {stage_path}"}],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"SCAN: Found {len(files)} parquet files in {stage_path}",
+                }
+            ],
         }
     except Exception as e:
         return {
@@ -57,11 +63,11 @@ def scan_node(state: ParquetGraphState) -> Dict[str, Any]:
         }
 
 
-def schema_infer_node(state: ParquetGraphState) -> Dict[str, Any]:
+def schema_infer_node(state: ParquetGraphState) -> dict[str, Any]:
     processor = create_processor(state)
     schemas = {}
     errors = []
-    
+
     for file_dict in state.get("files", []):
         pf = ParquetFile(
             path=file_dict["path"],
@@ -74,19 +80,26 @@ def schema_infer_node(state: ParquetGraphState) -> Dict[str, Any]:
                 schemas[pf.name] = pf.schema
         except Exception as e:
             errors.append(f"Schema inference failed for {pf.name}: {str(e)}")
-    
+
     return {
         "schemas": schemas,
-        "current_state": ParquetProcessorState.PROFILE.value if schemas else ParquetProcessorState.FAILED.value,
+        "current_state": ParquetProcessorState.PROFILE.value
+        if schemas
+        else ParquetProcessorState.FAILED.value,
         "errors": errors,
-        "messages": [{"role": "system", "content": f"SCHEMA_INFER: Inferred schemas for {len(schemas)} files"}],
+        "messages": [
+            {
+                "role": "system",
+                "content": f"SCHEMA_INFER: Inferred schemas for {len(schemas)} files",
+            }
+        ],
     }
 
 
-def profile_node(state: ParquetGraphState) -> Dict[str, Any]:
+def profile_node(state: ParquetGraphState) -> dict[str, Any]:
     processor = create_processor(state)
     profiles = {}
-    
+
     for file_dict in state.get("files", []):
         pf = ParquetFile(
             path=file_dict["path"],
@@ -101,18 +114,20 @@ def profile_node(state: ParquetGraphState) -> Dict[str, Any]:
                 profiles[pf.name] = profile
             except Exception:
                 profiles[pf.name] = {"error": "Profile failed"}
-    
+
     return {
         "profiles": profiles,
         "current_state": ParquetProcessorState.QUALITY_CHECK.value,
-        "messages": [{"role": "system", "content": f"PROFILE: Generated profiles for {len(profiles)} files"}],
+        "messages": [
+            {"role": "system", "content": f"PROFILE: Generated profiles for {len(profiles)} files"}
+        ],
     }
 
 
-def quality_check_node(state: ParquetGraphState) -> Dict[str, Any]:
+def quality_check_node(state: ParquetGraphState) -> dict[str, Any]:
     processor = create_processor(state)
     quality_issues = {}
-    
+
     for file_dict in state.get("files", []):
         pf = ParquetFile(
             path=file_dict["path"],
@@ -124,19 +139,24 @@ def quality_check_node(state: ParquetGraphState) -> Dict[str, Any]:
         issues = processor.quality_check(pf)
         if issues:
             quality_issues[pf.name] = issues
-    
+
     total_issues = sum(len(v) for v in quality_issues.values())
     return {
         "quality_issues": quality_issues,
         "current_state": ParquetProcessorState.TRANSFORM.value,
-        "messages": [{"role": "system", "content": f"QUALITY_CHECK: Found {total_issues} issues across {len(quality_issues)} files"}],
+        "messages": [
+            {
+                "role": "system",
+                "content": f"QUALITY_CHECK: Found {total_issues} issues across {len(quality_issues)} files",
+            }
+        ],
     }
 
 
-def transform_node(state: ParquetGraphState) -> Dict[str, Any]:
+def transform_node(state: ParquetGraphState) -> dict[str, Any]:
     processor = create_processor(state)
     column_mappings = {}
-    
+
     for file_dict in state.get("files", []):
         pf = ParquetFile(
             path=file_dict["path"],
@@ -147,19 +167,24 @@ def transform_node(state: ParquetGraphState) -> Dict[str, Any]:
         mapping = processor.transform(pf)
         if mapping:
             column_mappings[pf.name] = mapping
-    
+
     return {
         "column_mappings": column_mappings,
         "current_state": ParquetProcessorState.LOAD.value,
-        "messages": [{"role": "system", "content": f"TRANSFORM: Created column mappings for {len(column_mappings)} files"}],
+        "messages": [
+            {
+                "role": "system",
+                "content": f"TRANSFORM: Created column mappings for {len(column_mappings)} files",
+            }
+        ],
     }
 
 
-def load_node(state: ParquetGraphState) -> Dict[str, Any]:
+def load_node(state: ParquetGraphState) -> dict[str, Any]:
     processor = create_processor(state)
     tables_created = []
     errors = []
-    
+
     for file_dict in state.get("files", []):
         pf = ParquetFile(
             path=file_dict["path"],
@@ -168,13 +193,13 @@ def load_node(state: ParquetGraphState) -> Dict[str, Any]:
             schema=state.get("schemas", {}).get(file_dict["name"]),
         )
         column_mapping = state.get("column_mappings", {}).get(pf.name)
-        
+
         try:
             table_name = processor.load(pf, column_mapping)
             tables_created.append(table_name)
         except Exception as e:
             errors.append(f"Load failed for {pf.name}: {str(e)}")
-    
+
     return {
         "tables_created": tables_created,
         "current_state": ParquetProcessorState.COMPLETE.value,
@@ -183,9 +208,11 @@ def load_node(state: ParquetGraphState) -> Dict[str, Any]:
     }
 
 
-def should_continue(state: ParquetGraphState) -> Literal["schema_infer", "profile", "quality_check", "transform", "load", "end"]:
+def should_continue(
+    state: ParquetGraphState,
+) -> Literal["schema_infer", "profile", "quality_check", "transform", "load", "end"]:
     current = state.get("current_state", "")
-    
+
     if current == ParquetProcessorState.FAILED.value:
         return "end"
     elif current == ParquetProcessorState.SCHEMA_INFER.value:
@@ -202,25 +229,25 @@ def should_continue(state: ParquetGraphState) -> Literal["schema_infer", "profil
         return "end"
 
 
-def build_parquet_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> StateGraph:
+def build_parquet_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
     graph = StateGraph(ParquetGraphState)
-    
+
     graph.add_node("scan", scan_node)
     graph.add_node("schema_infer", schema_infer_node)
     graph.add_node("profile", profile_node)
     graph.add_node("quality_check", quality_check_node)
     graph.add_node("transform", transform_node)
     graph.add_node("load", load_node)
-    
+
     graph.set_entry_point("scan")
-    
+
     graph.add_conditional_edges(
         "scan",
         should_continue,
         {
             "schema_infer": "schema_infer",
             "end": END,
-        }
+        },
     )
     graph.add_conditional_edges(
         "schema_infer",
@@ -228,7 +255,7 @@ def build_parquet_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> S
         {
             "profile": "profile",
             "end": END,
-        }
+        },
     )
     graph.add_conditional_edges(
         "profile",
@@ -236,7 +263,7 @@ def build_parquet_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> S
         {
             "quality_check": "quality_check",
             "end": END,
-        }
+        },
     )
     graph.add_conditional_edges(
         "quality_check",
@@ -244,7 +271,7 @@ def build_parquet_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> S
         {
             "transform": "transform",
             "end": END,
-        }
+        },
     )
     graph.add_conditional_edges(
         "transform",
@@ -252,10 +279,10 @@ def build_parquet_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> S
         {
             "load": "load",
             "end": END,
-        }
+        },
     )
     graph.add_edge("load", END)
-    
+
     return graph.compile(checkpointer=checkpointer)
 
 
@@ -263,11 +290,11 @@ def run_parquet_pipeline(
     stage_path: str,
     target_schema: str = "RAW",
     database: str = "AGENTIC_PLATFORM",
-    checkpointer: Optional[BaseCheckpointSaver] = None,
+    checkpointer: BaseCheckpointSaver | None = None,
     thread_id: str = "parquet-default",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     graph = build_parquet_graph(checkpointer)
-    
+
     initial_state: ParquetGraphState = {
         "stage_path": stage_path,
         "target_schema": target_schema,
@@ -282,8 +309,8 @@ def run_parquet_pipeline(
         "errors": [],
         "messages": [],
     }
-    
+
     config = {"configurable": {"thread_id": thread_id}}
     result = graph.invoke(initial_state, config)
-    
+
     return result

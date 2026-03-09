@@ -1,15 +1,14 @@
 """ML Model Builder agent - 6-state pipeline for model training."""
 
-import json
 import os
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any
 
 from src.config import get_settings
 
 
-class MLModelBuilderState(str, Enum):
+class MLModelBuilderState(StrEnum):
     TASK_CLASSIFICATION = "TASK_CLASSIFICATION"
     FEATURE_SELECTION = "FEATURE_SELECTION"
     TRAINING = "TRAINING"
@@ -20,7 +19,7 @@ class MLModelBuilderState(str, Enum):
     FAILED = "FAILED"
 
 
-class TaskType(str, Enum):
+class TaskType(StrEnum):
     CLASSIFICATION = "classification"
     REGRESSION = "regression"
     CLUSTERING = "clustering"
@@ -30,11 +29,11 @@ class TaskType(str, Enum):
 @dataclass
 class ModelMetrics:
     task_type: TaskType
-    metrics: Dict[str, float]
-    feature_importance: Optional[Dict[str, float]] = None
-    confusion_matrix: Optional[List[List[int]]] = None
+    metrics: dict[str, float]
+    feature_importance: dict[str, float] | None = None
+    confusion_matrix: list[list[int]] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_type": self.task_type.value,
             "metrics": self.metrics,
@@ -48,9 +47,9 @@ class MLModelBuilder:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
-        database: Optional[str] = None,
-        schema: Optional[str] = None,
+        connection_name: str | None = None,
+        database: str | None = None,
+        schema: str | None = None,
     ):
         settings = get_settings()
         self.connection_name = connection_name or settings.connection_name
@@ -68,14 +67,16 @@ class MLModelBuilder:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
     def _get_snowpark_session(self):
-        if hasattr(self.session, 'sql'):
+        if hasattr(self.session, "sql"):
             return self.session
         raise RuntimeError("Snowpark session required for ML operations")
 
@@ -88,7 +89,7 @@ class MLModelBuilder:
 
         session = self._get_snowpark_session()
         df = session.table(table_name)
-        
+
         distinct_count = df.select(target_column).distinct().count()
         total_count = df.count()
 
@@ -101,10 +102,10 @@ class MLModelBuilder:
         self,
         table_name: str,
         target_column: str,
-        exclude_columns: Optional[List[str]] = None,
-    ) -> List[str]:
+        exclude_columns: list[str] | None = None,
+    ) -> list[str]:
         self._state = MLModelBuilderState.FEATURE_SELECTION
-        
+
         exclude_columns = exclude_columns or []
         exclude_set = {c.upper() for c in exclude_columns}
         exclude_set.add(target_column.upper())
@@ -117,9 +118,9 @@ class MLModelBuilder:
             col_name = field.name
             if col_name.upper() in exclude_set:
                 continue
-            
+
             dtype = str(field.datatype).upper()
-            if any(t in dtype for t in ['NUMBER', 'FLOAT', 'INT', 'DOUBLE', 'DECIMAL', 'BOOLEAN']):
+            if any(t in dtype for t in ["NUMBER", "FLOAT", "INT", "DOUBLE", "DECIMAL", "BOOLEAN"]):
                 features.append(col_name)
 
         return features
@@ -128,17 +129,18 @@ class MLModelBuilder:
         self,
         table_name: str,
         target_column: str,
-        feature_columns: List[str],
+        feature_columns: list[str],
         task_type: TaskType,
         test_size: float = 0.2,
     ) -> Any:
         self._state = MLModelBuilderState.TRAINING
 
-        from snowflake.ml.modeling.preprocessing import StandardScaler
         from snowflake.ml.modeling.pipeline import Pipeline
-        
+        from snowflake.ml.modeling.preprocessing import StandardScaler
+
         if task_type == TaskType.CLASSIFICATION:
             from snowflake.ml.modeling.xgboost import XGBClassifier
+
             model = XGBClassifier(
                 input_cols=feature_columns,
                 label_cols=[target_column],
@@ -146,6 +148,7 @@ class MLModelBuilder:
             )
         else:
             from snowflake.ml.modeling.xgboost import XGBRegressor
+
             model = XGBRegressor(
                 input_cols=feature_columns,
                 label_cols=[target_column],
@@ -157,16 +160,18 @@ class MLModelBuilder:
             output_cols=feature_columns,
         )
 
-        pipeline = Pipeline(steps=[
-            ("scaler", scaler),
-            ("model", model),
-        ])
+        pipeline = Pipeline(
+            steps=[
+                ("scaler", scaler),
+                ("model", model),
+            ]
+        )
 
         session = self._get_snowpark_session()
         df = session.table(table_name)
 
         train_df, test_df = df.random_split([1 - test_size, test_size], seed=42)
-        
+
         pipeline.fit(train_df)
 
         return {
@@ -188,12 +193,12 @@ class MLModelBuilder:
 
         from snowflake.ml.modeling.metrics import (
             accuracy_score,
-            precision_score,
-            recall_score,
             f1_score,
-            mean_squared_error,
             mean_absolute_error,
+            mean_squared_error,
+            precision_score,
             r2_score,
+            recall_score,
         )
 
         if task_type == TaskType.CLASSIFICATION:
@@ -202,9 +207,11 @@ class MLModelBuilder:
 
             metrics = {
                 "accuracy": float(accuracy_score(y_true=y_true, y_pred=y_pred)),
-                "precision": float(precision_score(y_true=y_true, y_pred=y_pred, average='weighted')),
-                "recall": float(recall_score(y_true=y_true, y_pred=y_pred, average='weighted')),
-                "f1": float(f1_score(y_true=y_true, y_pred=y_pred, average='weighted')),
+                "precision": float(
+                    precision_score(y_true=y_true, y_pred=y_pred, average="weighted")
+                ),
+                "recall": float(recall_score(y_true=y_true, y_pred=y_pred, average="weighted")),
+                "f1": float(f1_score(y_true=y_true, y_pred=y_pred, average="weighted")),
             }
         else:
             y_true = predictions_df.select(target_column).to_pandas()[target_column]
@@ -233,7 +240,7 @@ class MLModelBuilder:
         self._state = MLModelBuilderState.REGISTRATION
 
         from snowflake.ml.registry import Registry
-        
+
         session = self._get_snowpark_session()
         registry = Registry(
             session=session,
@@ -241,7 +248,7 @@ class MLModelBuilder:
             schema_name=self.schema,
         )
 
-        model_version = registry.log_model(
+        registry.log_model(
             model=pipeline,
             model_name=model_name,
             version_name=version,
@@ -256,19 +263,19 @@ class MLModelBuilder:
         self,
         pipeline: Any,
         sample_df: Any,
-        feature_columns: List[str],
-    ) -> Dict[str, Any]:
+        feature_columns: list[str],
+    ) -> dict[str, Any]:
         self._state = MLModelBuilderState.EXPLAINABILITY
 
         try:
             import shap
-            
+
             model_step = pipeline.steps[-1][1]
-            if hasattr(model_step, 'to_sklearn'):
+            if hasattr(model_step, "to_sklearn"):
                 sklearn_model = model_step.to_sklearn()
-                
+
                 sample_pd = sample_df.select(feature_columns).limit(100).to_pandas()
-                
+
                 explainer = shap.TreeExplainer(sklearn_model)
                 shap_values = explainer.shap_values(sample_pd)
 
@@ -299,8 +306,8 @@ class MLModelBuilder:
         target_column: str,
         model_name: str,
         version: str = "v1",
-        exclude_columns: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        exclude_columns: list[str] | None = None,
+    ) -> dict[str, Any]:
         result = {
             "model_name": model_name,
             "version": version,
@@ -315,7 +322,7 @@ class MLModelBuilder:
             result["features"] = features
 
             train_result = self.train(table_name, target_column, features, task_type)
-            
+
             metrics = self.evaluate(
                 train_result["pipeline"],
                 train_result["test_df"],
@@ -351,7 +358,7 @@ class MLModelBuilder:
         return result
 
 
-def build_ml_model(state: Dict[str, Any]) -> Dict[str, Any]:
+def build_ml_model(state: dict[str, Any]) -> dict[str, Any]:
     """LangGraph node function for ML model building."""
     builder = MLModelBuilder()
 
@@ -378,8 +385,11 @@ def build_ml_model(state: Dict[str, Any]) -> Dict[str, Any]:
         "ml_result": result,
         "model_reference": result.get("model_reference"),
         "current_state": builder._state.value,
-        "messages": state.get("messages", []) + [{
-            "role": "system",
-            "content": f"ML model build {result.get('status')}: {result.get('task_type', 'unknown')} task",
-        }],
+        "messages": state.get("messages", [])
+        + [
+            {
+                "role": "system",
+                "content": f"ML model build {result.get('status')}: {result.get('task_type', 'unknown')} task",
+            }
+        ],
     }

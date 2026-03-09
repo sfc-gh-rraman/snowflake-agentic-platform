@@ -3,11 +3,11 @@
 import json
 import os
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 
-class AppGeneratorState(str, Enum):
+class AppGeneratorState(StrEnum):
     APP_SPEC_GENERATION = "APP_SPEC_GENERATION"
     REACT_CODE_GENERATION = "REACT_CODE_GENERATION"
     FASTAPI_CODE_GENERATION = "FASTAPI_CODE_GENERATION"
@@ -21,11 +21,11 @@ class AppGeneratorState(str, Enum):
 class AppSpec:
     app_name: str
     description: str
-    pages: List[Dict[str, Any]]
-    data_sources: List[Dict[str, Any]]
-    features: List[str] = field(default_factory=list)
+    pages: list[dict[str, Any]]
+    data_sources: list[dict[str, Any]]
+    features: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "app_name": self.app_name,
             "description": self.description,
@@ -67,7 +67,7 @@ Generate a JSON app specification:
 Return ONLY the JSON object."""
 
 
-REACT_COMPONENT_TEMPLATE = '''import React, {{ useState, useEffect }} from 'react';
+REACT_COMPONENT_TEMPLATE = """import React, {{ useState, useEffect }} from 'react';
 import {{ Box, Container, Typography, Paper, CircularProgress }} from '@mui/material';
 
 interface {component_name}Props {{
@@ -109,10 +109,10 @@ export const {component_name}: React.FC<{component_name}Props> = ({{ title = "{t
 }};
 
 export default {component_name};
-'''
+"""
 
 
-FASTAPI_ROUTE_TEMPLATE = '''from fastapi import APIRouter, HTTPException
+FASTAPI_ROUTE_TEMPLATE = """from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import os
@@ -147,10 +147,10 @@ class DataResponse(BaseModel):
 
 
 {endpoints}
-'''
+"""
 
 
-DOCKERFILE_TEMPLATE = '''FROM python:3.10-slim
+DOCKERFILE_TEMPLATE = """FROM python:3.10-slim
 
 WORKDIR /app
 
@@ -164,7 +164,7 @@ ENV PORT=8080
 EXPOSE 8080
 
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8080"]
-'''
+"""
 
 
 class AppCodeGenerator:
@@ -172,7 +172,7 @@ class AppCodeGenerator:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         model: str = "mistral-large2",
         output_dir: str = "./generated_app",
     ):
@@ -191,14 +191,16 @@ class AppCodeGenerator:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
     def _execute(self, sql: str) -> str:
-        if hasattr(self.session, 'sql'):
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return result[0][0] if result else ""
         else:
@@ -216,10 +218,10 @@ class AppCodeGenerator:
     def generate_app_spec(
         self,
         use_case: str,
-        tables: List[str],
-        models: List[str] = None,
-        search_services: List[str] = None,
-        semantic_models: List[str] = None,
+        tables: list[str],
+        models: list[str] = None,
+        search_services: list[str] = None,
+        semantic_models: list[str] = None,
     ) -> AppSpec:
         self._state = AppGeneratorState.APP_SPEC_GENERATION
 
@@ -241,8 +243,8 @@ class AppCodeGenerator:
 
         try:
             response = self._execute(sql)
-            start = response.find('{')
-            end = response.rfind('}') + 1
+            start = response.find("{")
+            end = response.rfind("}") + 1
             if start >= 0 and end > start:
                 data = json.loads(response[start:end])
             else:
@@ -258,7 +260,7 @@ class AppCodeGenerator:
             features=data.get("features", []),
         )
 
-    def _default_spec(self, use_case: str, tables: List[str]) -> Dict[str, Any]:
+    def _default_spec(self, use_case: str, tables: list[str]) -> dict[str, Any]:
         return {
             "app_name": "Data Explorer",
             "description": f"Application for: {use_case}",
@@ -279,12 +281,12 @@ class AppCodeGenerator:
             "features": ["search", "analytics"],
         }
 
-    def generate_react_components(self, spec: AppSpec) -> Dict[str, str]:
+    def generate_react_components(self, spec: AppSpec) -> dict[str, str]:
         self._state = AppGeneratorState.REACT_CODE_GENERATION
-        
+
         components = {}
 
-        app_tsx = f'''import React from 'react';
+        app_tsx = f"""import React from 'react';
 import {{ BrowserRouter, Routes, Route }} from 'react-router-dom';
 import {{ ThemeProvider, createTheme, CssBaseline }} from '@mui/material';
 import AppBar from '@mui/material/AppBar';
@@ -317,7 +319,7 @@ const App: React.FC = () => {{
 }};
 
 export default App;
-'''
+"""
         components["App.tsx"] = app_tsx
 
         for page in spec.pages:
@@ -337,7 +339,7 @@ export default App;
 
         return components
 
-    def _generate_routes(self, pages: List[Dict]) -> str:
+    def _generate_routes(self, pages: list[dict]) -> str:
         routes = []
         for page in pages:
             name = page.get("name", "Page").replace(" ", "")
@@ -345,41 +347,45 @@ export default App;
             routes.append(f'<Route path="{route}" element={{<{name} />}} />')
         return "\n          ".join(routes)
 
-    def _generate_page_content(self, components: List[str]) -> str:
+    def _generate_page_content(self, components: list[str]) -> str:
         content_parts = []
-        
+
         if "DataTable" in components:
-            content_parts.append('''<Box sx={{ mt: 2 }}>
+            content_parts.append("""<Box sx={{ mt: 2 }}>
           {data.map((row, idx) => (
             <Paper key={idx} sx={{ p: 1, mb: 1 }}>
               {JSON.stringify(row)}
             </Paper>
           ))}
-        </Box>''')
-        
+        </Box>""")
+
         if "SearchBox" in components:
-            content_parts.append('''<Box sx={{ mb: 2 }}>
+            content_parts.append("""<Box sx={{ mb: 2 }}>
           <input type="text" placeholder="Search..." style={{ width: '100%', padding: 8 }} />
-        </Box>''')
-        
+        </Box>""")
+
         if "Chart" in components:
-            content_parts.append('''<Box sx={{ height: 300 }}>
+            content_parts.append("""<Box sx={{ height: 300 }}>
           <Typography>Chart visualization placeholder</Typography>
-        </Box>''')
+        </Box>""")
 
-        return "\n        ".join(content_parts) if content_parts else "<Typography>No data</Typography>"
+        return (
+            "\n        ".join(content_parts)
+            if content_parts
+            else "<Typography>No data</Typography>"
+        )
 
-    def generate_fastapi_backend(self, spec: AppSpec) -> Dict[str, str]:
+    def generate_fastapi_backend(self, spec: AppSpec) -> dict[str, str]:
         self._state = AppGeneratorState.FASTAPI_CODE_GENERATION
-        
+
         files = {}
 
-        main_py = '''from fastapi import FastAPI
+        main_py = f'''from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-app = FastAPI(title="{app_name}")
+app = FastAPI(title="{spec.app_name}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -397,10 +403,10 @@ app.include_router(ml.router)
 
 if os.path.exists("./static"):
     app.mount("/", StaticFiles(directory="static", html=True), name="static")
-'''.format(app_name=spec.app_name)
+'''
         files["main.py"] = main_py
 
-        data_endpoints = '''
+        data_endpoints = """
 @router.get("/")
 async def list_data() -> DataResponse:
     conn = get_connection()
@@ -429,7 +435,7 @@ async def execute_query(request: QueryRequest) -> DataResponse:
     finally:
         cursor.close()
         conn.close()
-'''
+"""
         files["routes/data.py"] = FASTAPI_ROUTE_TEMPLATE.format(
             route_prefix="data",
             tag="Data",
@@ -508,35 +514,39 @@ async def predict(request: PredictRequest) -> Dict[str, Any]:
 
         return files
 
-    def generate_deployment_config(self, spec: AppSpec) -> Dict[str, str]:
+    def generate_deployment_config(self, spec: AppSpec) -> dict[str, str]:
         self._state = AppGeneratorState.DEPLOYMENT_CONFIG_GENERATION
-        
+
         files = {}
 
         files["Dockerfile"] = DOCKERFILE_TEMPLATE
 
-        files["requirements.txt"] = '''fastapi==0.109.0
+        files["requirements.txt"] = """fastapi==0.109.0
 uvicorn==0.27.0
 snowflake-connector-python==3.6.0
 pydantic==2.5.3
 python-multipart==0.0.6
-'''
+"""
 
         spcs_spec = {
             "spec": {
-                "containers": [{
-                    "name": spec.app_name.lower().replace(" ", "-"),
-                    "image": f"/AGENTIC_PLATFORM/ANALYTICS/APP_IMAGES/{spec.app_name.lower().replace(' ', '_')}:latest",
-                    "env": {
-                        "SNOWFLAKE_ACCOUNT": "{{ context().CURRENT_ACCOUNT }}",
-                        "SNOWFLAKE_HOST": "{{ context().CURRENT_HOST }}",
-                    },
-                }],
-                "endpoints": [{
-                    "name": "app",
-                    "port": 8080,
-                    "public": True,
-                }],
+                "containers": [
+                    {
+                        "name": spec.app_name.lower().replace(" ", "-"),
+                        "image": f"/AGENTIC_PLATFORM/ANALYTICS/APP_IMAGES/{spec.app_name.lower().replace(' ', '_')}:latest",
+                        "env": {
+                            "SNOWFLAKE_ACCOUNT": "{{ context().CURRENT_ACCOUNT }}",
+                            "SNOWFLAKE_HOST": "{{ context().CURRENT_HOST }}",
+                        },
+                    }
+                ],
+                "endpoints": [
+                    {
+                        "name": "app",
+                        "port": 8080,
+                        "public": True,
+                    }
+                ],
             }
         }
         files["spcs_service.yaml"] = json.dumps(spcs_spec, indent=2)
@@ -546,18 +556,20 @@ python-multipart==0.0.6
     def generate(
         self,
         use_case: str,
-        tables: List[str],
-        models: List[str] = None,
-        search_services: List[str] = None,
-        semantic_models: List[str] = None,
-    ) -> Dict[str, Any]:
+        tables: list[str],
+        models: list[str] = None,
+        search_services: list[str] = None,
+        semantic_models: list[str] = None,
+    ) -> dict[str, Any]:
         result = {
             "status": "started",
             "files": {},
         }
 
         try:
-            spec = self.generate_app_spec(use_case, tables, models, search_services, semantic_models)
+            spec = self.generate_app_spec(
+                use_case, tables, models, search_services, semantic_models
+            )
             result["spec"] = spec.to_dict()
 
             react_files = self.generate_react_components(spec)
@@ -582,7 +594,7 @@ python-multipart==0.0.6
         return result
 
 
-def generate_app(state: Dict[str, Any]) -> Dict[str, Any]:
+def generate_app(state: dict[str, Any]) -> dict[str, Any]:
     """LangGraph node function for app generation."""
     generator = AppCodeGenerator()
 
@@ -604,8 +616,11 @@ def generate_app(state: Dict[str, Any]) -> Dict[str, Any]:
         "app_result": result,
         "generated_files": result.get("files", {}),
         "current_state": generator._state.value,
-        "messages": state.get("messages", []) + [{
-            "role": "system",
-            "content": f"Generated app with {len(result.get('files', {}))} files",
-        }],
+        "messages": state.get("messages", [])
+        + [
+            {
+                "role": "system",
+                "content": f"Generated app with {len(result.get('files', {}))} files",
+            }
+        ],
     }

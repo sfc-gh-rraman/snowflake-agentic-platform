@@ -25,16 +25,16 @@ def test_create_search_service():
     print("\n" + "=" * 60)
     print("STEP 1: Create Cortex Search Service")
     print("=" * 60)
-    
+
     from src.agents.search.search_builder import CortexSearchBuilder
-    
+
     builder = CortexSearchBuilder(
         connection_name=CONNECTION_NAME,
         database=DATABASE,
         schema=CORTEX_SCHEMA,
         warehouse="COMPUTE_WH",
     )
-    
+
     try:
         service_ref = builder.create_search_service(
             service_name="DDR_SEARCH",
@@ -43,7 +43,7 @@ def test_create_search_service():
             attribute_columns=["DDR_ID", "WELL_NAME", "REPORT_DATE", "HAS_INCIDENT"],
             target_lag="1 day",
         )
-        
+
         print(f"✅ Created search service: {service_ref}")
         return True, builder, service_ref
     except Exception as e:
@@ -56,7 +56,7 @@ def test_list_services(builder):
     print("\n" + "=" * 60)
     print("STEP 2: List Search Services")
     print("=" * 60)
-    
+
     try:
         services = builder.list_services()
         print(f"✅ Found {len(services)} search service(s)")
@@ -74,14 +74,14 @@ def test_search_queries(builder, service_ref):
     print("\n" + "=" * 60)
     print("STEP 3: Test Search Queries")
     print("=" * 60)
-    
+
     test_queries = [
         ("stuck pipe", "Should find stuck pipe incidents"),
         ("drilling mud loss", "Should find mud loss events"),
         ("BOP test", "Should find BOP test activities"),
         ("cement plug", "Should find cementing operations"),
     ]
-    
+
     passed = 0
     for query, description in test_queries:
         try:
@@ -91,7 +91,7 @@ def test_search_queries(builder, service_ref):
                 columns=["ACTIVITIES", "WELL_NAME", "REPORT_DATE"],
                 limit=3,
             )
-            
+
             if results and not results[0].get("error"):
                 print(f"✅ Query '{query}': {len(results)} results")
                 if results:
@@ -103,7 +103,7 @@ def test_search_queries(builder, service_ref):
                 print(f"⚠️  Query '{query}': {error}")
         except Exception as e:
             print(f"❌ Query '{query}' failed: {str(e)}")
-    
+
     print(f"\n   Search test: {passed}/{len(test_queries)} queries succeeded")
     return passed >= 2
 
@@ -113,7 +113,7 @@ def test_filtered_search(builder, service_ref):
     print("\n" + "=" * 60)
     print("STEP 4: Test Filtered Search (Incidents Only)")
     print("=" * 60)
-    
+
     try:
         results = builder.search(
             service_name=service_ref,
@@ -122,14 +122,14 @@ def test_filtered_search(builder, service_ref):
             filter_dict={"@eq": {"HAS_INCIDENT": True}},
             limit=5,
         )
-        
+
         if results and not results[0].get("error"):
             incident_count = sum(1 for r in results if r.get("HAS_INCIDENT"))
             print(f"✅ Filtered search returned {len(results)} results")
             print(f"   Incidents in results: {incident_count}")
             return True
         else:
-            print(f"⚠️  Filtered search: No results or error")
+            print("⚠️  Filtered search: No results or error")
             return True
     except Exception as e:
         print(f"⚠️  Filtered search not supported: {str(e)[:50]}")
@@ -143,25 +143,26 @@ def run_search_builder_test():
     print("=" * 70)
     print(f"Database: {DATABASE}")
     print(f"Source: {DATABASE}.{RAW_SCHEMA}.DAILY_DRILLING_REPORTS (1,759 reports)")
-    
+
     results = {}
-    
+
     success, builder, service_ref = test_create_search_service()
     results["create_service"] = success
-    
+
     if not success or not builder:
         print("\n❌ Cannot continue without search service")
         return results
-    
+
     results["list_services"] = test_list_services(builder)
-    
+
     print("\n   Waiting for search service to index (10 seconds)...")
     import time
+
     time.sleep(10)
-    
+
     results["search_queries"] = test_search_queries(builder, service_ref)
     results["filtered_search"] = test_filtered_search(builder, service_ref)
-    
+
     print("\n" + "=" * 70)
     print("SEARCH BUILDER TEST SUMMARY")
     print("=" * 70)
@@ -170,10 +171,10 @@ def run_search_builder_test():
     print(f"Results: {passed}/{total} steps passed")
     for step, status in results.items():
         print(f"  {'✅' if status else '❌'} {step}")
-    
+
     if success:
         print(f"\n📍 Search Service: {service_ref}")
-    
+
     return results
 
 

@@ -3,8 +3,7 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
-
+from typing import Any
 
 SEMANTIC_PROMPT = """Analyze this data sample for semantic validity.
 
@@ -37,11 +36,11 @@ Return ONLY the JSON object."""
 @dataclass
 class SemanticResult:
     passed: bool
-    issues: List[Dict[str, Any]]
-    recommendations: List[str]
+    issues: list[dict[str, Any]]
+    recommendations: list[str]
     score: float
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "passed": self.passed,
             "issues": self.issues,
@@ -55,7 +54,7 @@ class SemanticValidator:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         model: str = "mistral-large2",
     ):
         self.connection_name = connection_name or os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
@@ -71,14 +70,16 @@ class SemanticValidator:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
     def _execute(self, sql: str) -> Any:
-        if hasattr(self.session, 'sql'):
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return result[0][0] if result else ""
         else:
@@ -90,8 +91,8 @@ class SemanticValidator:
             finally:
                 cursor.close()
 
-    def _execute_query(self, sql: str) -> List[Dict]:
-        if hasattr(self.session, 'sql'):
+    def _execute_query(self, sql: str) -> list[dict]:
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -116,13 +117,13 @@ class SemanticValidator:
         except Exception:
             return "[]"
 
-    def _get_columns(self, table_name: str) -> List[str]:
-        parts = table_name.split('.')
+    def _get_columns(self, table_name: str) -> list[str]:
+        parts = table_name.split(".")
         table = parts[-1]
-        
+
         sql = f"""
             SELECT COLUMN_NAME, DATA_TYPE
-            FROM {'.'.join(parts[:-1]) if len(parts) > 1 else parts[0]}.INFORMATION_SCHEMA.COLUMNS
+            FROM {".".join(parts[:-1]) if len(parts) > 1 else parts[0]}.INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_NAME = '{table}'
         """
         try:
@@ -156,20 +157,24 @@ class SemanticValidator:
 
         try:
             response = self._execute(sql)
-            
-            start = response.find('{')
-            end = response.rfind('}') + 1
+
+            start = response.find("{")
+            end = response.rfind("}") + 1
             if start >= 0 and end > start:
                 data = json.loads(response[start:end])
             else:
                 data = {"passed": True, "issues": [], "recommendations": []}
 
         except Exception:
-            data = {"passed": True, "issues": [], "recommendations": ["Unable to perform semantic validation"]}
+            data = {
+                "passed": True,
+                "issues": [],
+                "recommendations": ["Unable to perform semantic validation"],
+            }
 
         issues = data.get("issues", [])
         high_severity = sum(1 for i in issues if i.get("severity") == "high")
-        
+
         return SemanticResult(
             passed=data.get("passed", True) and high_severity == 0,
             issues=issues,

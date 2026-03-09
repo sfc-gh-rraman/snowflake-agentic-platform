@@ -1,6 +1,6 @@
 """State management for Snowflake Agentic Platform."""
 
-from .state_manager import StateManager
 from .snowflake_checkpoint import SnowflakeCheckpointSaver
+from .state_manager import StateManager
 
 __all__ = ["StateManager", "SnowflakeCheckpointSaver"]

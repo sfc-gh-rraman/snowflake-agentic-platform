@@ -2,17 +2,17 @@
 
 import os
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from .completeness import CompletenessValidator
-from .schema_validator import SchemaValidator
-from .quality import QualityValidator
-from .semantic import SemanticValidator
 from .ml_specific import MLValidator
+from .quality import QualityValidator
+from .schema_validator import SchemaValidator
+from .semantic import SemanticValidator
 
 
-class ValidationStatus(str, Enum):
+class ValidationStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     PASSED = "passed"
@@ -25,12 +25,12 @@ class ValidationStatus(str, Enum):
 class ValidationReport:
     status: ValidationStatus
     overall_score: float
-    suite_results: Dict[str, Any]
-    issues: List[str]
-    recommendations: List[str]
+    suite_results: dict[str, Any]
+    issues: list[str]
+    recommendations: list[str]
     retry_count: int
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "status": self.status.value,
             "overall_score": self.overall_score,
@@ -46,7 +46,7 @@ class ValidationOrchestrator:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         max_retries: int = 3,
         min_pass_score: float = 0.7,
     ):
@@ -64,17 +64,19 @@ class ValidationOrchestrator:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
     def run_completeness(
         self,
         table_name: str,
-        config: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        config: dict[str, Any],
+    ) -> dict[str, Any]:
         validator = CompletenessValidator(session=self.session)
         result = validator.validate(
             table_name=table_name,
@@ -88,8 +90,8 @@ class ValidationOrchestrator:
     def run_schema(
         self,
         table_name: str,
-        config: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        config: dict[str, Any],
+    ) -> dict[str, Any]:
         validator = SchemaValidator(
             session=self.session,
             naming_convention=config.get("naming_convention", "SCREAMING_SNAKE"),
@@ -100,8 +102,8 @@ class ValidationOrchestrator:
     def run_quality(
         self,
         table_name: str,
-        config: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        config: dict[str, Any],
+    ) -> dict[str, Any]:
         validator = QualityValidator(session=self.session)
         result = validator.validate(
             table_name=table_name,
@@ -115,8 +117,8 @@ class ValidationOrchestrator:
     def run_semantic(
         self,
         table_name: str,
-        config: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        config: dict[str, Any],
+    ) -> dict[str, Any]:
         validator = SemanticValidator(connection_name=self.connection_name)
         result = validator.validate(
             table_name=table_name,
@@ -127,8 +129,8 @@ class ValidationOrchestrator:
     def run_ml_specific(
         self,
         table_name: str,
-        config: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        config: dict[str, Any],
+    ) -> dict[str, Any]:
         validator = MLValidator(session=self.session)
         result = validator.validate(
             table_name=table_name,
@@ -142,8 +144,8 @@ class ValidationOrchestrator:
     def validate(
         self,
         table_name: str,
-        suites: Optional[List[str]] = None,
-        config: Optional[Dict[str, Any]] = None,
+        suites: list[str] | None = None,
+        config: dict[str, Any] | None = None,
     ) -> ValidationReport:
         suites = suites or ["completeness", "schema", "quality"]
         config = config or {}
@@ -174,7 +176,7 @@ class ValidationOrchestrator:
                 try:
                     result = suite_runners[suite_name](table_name, suite_config)
                     suite_results[suite_name] = result
-                    
+
                     if result.get("passed"):
                         success = True
                     else:
@@ -216,10 +218,10 @@ class ValidationOrchestrator:
         )
 
 
-def validate_data(state: Dict[str, Any]) -> Dict[str, Any]:
+def validate_data(state: dict[str, Any]) -> dict[str, Any]:
     """LangGraph node function for data validation."""
     orchestrator = ValidationOrchestrator()
-    
+
     tables = state.get("tables_to_validate", [])
     suites = state.get("validation_suites", ["completeness", "schema", "quality"])
     config = state.get("validation_config", {})
@@ -230,7 +232,7 @@ def validate_data(state: Dict[str, Any]) -> Dict[str, Any]:
     for table in tables:
         report = orchestrator.validate(table, suites, config)
         validation_results[table] = report.to_dict()
-        
+
         if report.status != ValidationStatus.PASSED:
             all_passed = False
 
@@ -238,8 +240,11 @@ def validate_data(state: Dict[str, Any]) -> Dict[str, Any]:
         "validation_results": validation_results,
         "validation_passed": all_passed,
         "current_state": "COMPLETE" if all_passed else "FAILED",
-        "messages": state.get("messages", []) + [{
-            "role": "system",
-            "content": f"Validated {len(tables)} tables. All passed: {all_passed}",
-        }],
+        "messages": state.get("messages", [])
+        + [
+            {
+                "role": "system",
+                "content": f"Validated {len(tables)} tables. All passed: {all_passed}",
+            }
+        ],
     }

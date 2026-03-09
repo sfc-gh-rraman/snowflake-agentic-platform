@@ -18,13 +18,15 @@ __version__ = "0.1.0"
 
 def get_meta_agent():
     """Get meta-agent components (requires langgraph)."""
-    from .meta_agent import create_meta_agent_graph, MetaAgentState
+    from .meta_agent import MetaAgentState, create_meta_agent_graph
+
     return create_meta_agent_graph, MetaAgentState
 
 
 def get_state_manager():
     """Get state management components (requires snowflake)."""
-    from .state import StateManager, SnowflakeCheckpointSaver
+    from .state import SnowflakeCheckpointSaver, StateManager
+
     return StateManager, SnowflakeCheckpointSaver
 
 

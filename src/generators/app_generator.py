@@ -3,29 +3,24 @@
 Generates React frontend and FastAPI backend from UseCaseConfig.
 """
 
-import json
 from pathlib import Path
-from typing import Dict, List
 
 from src.config import (
-    UseCaseConfig,
-    PageSpec,
-    UIComponent,
     ComponentType,
-    PageLayout,
-    APIEndpoint,
+    PageSpec,
+    UseCaseConfig,
 )
 
 
 def generate_app(config: UseCaseConfig, output_dir: Path) -> None:
     """Generate complete application code from UseCaseConfig.
-    
+
     Args:
         config: The use case configuration
         output_dir: Directory to write generated code
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     _generate_backend(config, output_dir / "backend")
     _generate_frontend(config, output_dir / "frontend")
     _generate_spcs_config(config, output_dir)
@@ -35,30 +30,30 @@ def _generate_backend(config: UseCaseConfig, output_dir: Path) -> None:
     """Generate FastAPI backend."""
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "routes").mkdir(exist_ok=True)
-    
+
     main_py = _generate_main_py(config)
     (output_dir / "main.py").write_text(main_py)
-    
+
     routes_init = '"""API routes package."""\n'
     (output_dir / "routes" / "__init__.py").write_text(routes_init)
-    
+
     chat_route = _generate_chat_route(config)
     (output_dir / "routes" / "chat.py").write_text(chat_route)
-    
+
     data_route = _generate_data_route(config)
     (output_dir / "routes" / "data.py").write_text(data_route)
-    
+
     if config.data.unstructured:
         search_route = _generate_search_route(config)
         (output_dir / "routes" / "search.py").write_text(search_route)
-    
+
     if config.ml_models:
         predict_route = _generate_predict_route(config)
         (output_dir / "routes" / "predict.py").write_text(predict_route)
-    
+
     requirements = _generate_requirements()
     (output_dir / "requirements.txt").write_text(requirements)
-    
+
     config_py = _generate_config_py(config)
     (output_dir / "config.py").write_text(config_py)
 
@@ -67,12 +62,16 @@ def _generate_main_py(config: UseCaseConfig) -> str:
     """Generate main FastAPI application."""
     has_search = bool(config.data.unstructured)
     has_ml = bool(config.ml_models)
-    
+
     search_import = "from routes import search" if has_search else ""
     predict_import = "from routes import predict" if has_ml else ""
-    search_router = "app.include_router(search.router, prefix='/api', tags=['search'])" if has_search else ""
-    predict_router = "app.include_router(predict.router, prefix='/api', tags=['predict'])" if has_ml else ""
-    
+    search_router = (
+        "app.include_router(search.router, prefix='/api', tags=['search'])" if has_search else ""
+    )
+    predict_router = (
+        "app.include_router(predict.router, prefix='/api', tags=['predict'])" if has_ml else ""
+    )
+
     return f'''"""FastAPI backend for {config.app.name}."""
 
 import os
@@ -146,7 +145,7 @@ def _generate_chat_route(config: UseCaseConfig) -> str:
     for a in config.agents:
         capabilities.extend(a.capabilities[:2])
     caps_str = "\\n".join(f"- {c}" for c in capabilities[:6])
-    
+
     return f'''"""Chat route with Cortex Agent."""
 
 import os
@@ -191,34 +190,34 @@ async def chat(request: ChatRequest):
     """Process a chat message through the {agent_name} agent."""
     start_time = time.time()
     session_id = request.session_id or str(uuid.uuid4())
-    
+
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         system_prompt = """You are {agent_name}, an AI assistant for {config.domain.name}.
-        
+
 Your capabilities:
 {caps_str}
 
 Be helpful, accurate, and concise."""
-        
+
         full_prompt = f"{{system_prompt}}\\n\\nUser: {{request.message}}"
         escaped = full_prompt.replace("'", "''")
-        
+
         sql = f"SELECT SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', '{{escaped}}')"
         cursor.execute(sql)
         result = cursor.fetchone()
         response_text = result[0] if result else "I could not process your request."
-        
+
         latency_ms = int((time.time() - start_time) * 1000)
-        
+
         return ChatResponse(
             response=response_text,
             session_id=session_id,
             latency_ms=latency_ms,
         )
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 '''
@@ -231,10 +230,10 @@ def _generate_data_route(config: UseCaseConfig) -> str:
     time_col = primary_data.time_column if primary_data else "timestamp"
     measures = primary_data.measures[:6] if primary_data else ["value"]
     table_name = primary_data.location if primary_data else "data"
-    
-    measures_list_str = ', '.join(f'"{m}"' for m in measures)
-    measures_values_str = ', '.join(f'"{m}": row[{i+1}]' for i, m in enumerate(measures))
-    
+
+    measures_list_str = ", ".join(f'"{m}"' for m in measures)
+    measures_values_str = ", ".join(f'"{m}": row[{i + 1}]' for i, m in enumerate(measures))
+
     return f'''"""Data routes for querying structured data."""
 
 import os
@@ -279,19 +278,19 @@ async def list_entities():
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         sql = f"""
-            SELECT 
+            SELECT
                 {entity_col} as entity_id,
                 COUNT(*) as record_count,
                 MAX({time_col}) as latest_timestamp
-            FROM {{settings.DATABASE}}.{{settings.CURATED_SCHEMA}}.{table_name.split('.')[-1]}
+            FROM {{settings.DATABASE}}.{{settings.CURATED_SCHEMA}}.{table_name.split(".")[-1]}
             GROUP BY {entity_col}
             ORDER BY {entity_col}
         """
         cursor.execute(sql)
         rows = cursor.fetchall()
-        
+
         return [
             {{
                 "entity_id": row[0],
@@ -300,7 +299,7 @@ async def list_entities():
             }}
             for row in rows
         ]
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -315,19 +314,19 @@ async def get_timeseries(
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         sql = f"""
-            SELECT 
+            SELECT
                 {time_col},
                 {measures_list_str}
-            FROM {{settings.DATABASE}}.{{settings.CURATED_SCHEMA}}.{table_name.split('.')[-1]}
+            FROM {{settings.DATABASE}}.{{settings.CURATED_SCHEMA}}.{table_name.split(".")[-1]}
             WHERE {entity_col} = %s
             ORDER BY {time_col} DESC
             LIMIT %s OFFSET %s
         """
         cursor.execute(sql, (entity_id, limit, offset))
         rows = cursor.fetchall()
-        
+
         return [
             {{
                 "timestamp": str(row[0]),
@@ -337,7 +336,7 @@ async def get_timeseries(
             }}
             for row in rows
         ]
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -348,22 +347,22 @@ async def get_latest(entity_id: str):
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         sql = f"""
-            SELECT 
+            SELECT
                 {time_col},
                 {measures_list_str}
-            FROM {{settings.DATABASE}}.{{settings.CURATED_SCHEMA}}.{table_name.split('.')[-1]}
+            FROM {{settings.DATABASE}}.{{settings.CURATED_SCHEMA}}.{table_name.split(".")[-1]}
             WHERE {entity_col} = %s
             ORDER BY {time_col} DESC
             LIMIT 1
         """
         cursor.execute(sql, (entity_id,))
         row = cursor.fetchone()
-        
+
         if not row:
             raise HTTPException(status_code=404, detail="Entity not found")
-        
+
         return {{
             "entity_id": entity_id,
             "timestamp": str(row[0]),
@@ -371,7 +370,7 @@ async def get_latest(entity_id: str):
                 {measures_values_str}
             }}
         }}
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -384,25 +383,25 @@ async def get_summary():
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         sql = f"""
-            SELECT 
+            SELECT
                 COUNT(DISTINCT {entity_col}) as entity_count,
                 COUNT(*) as total_records,
                 MIN({time_col}) as earliest,
                 MAX({time_col}) as latest
-            FROM {{settings.DATABASE}}.{{settings.CURATED_SCHEMA}}.{table_name.split('.')[-1]}
+            FROM {{settings.DATABASE}}.{{settings.CURATED_SCHEMA}}.{table_name.split(".")[-1]}
         """
         cursor.execute(sql)
         row = cursor.fetchone()
-        
+
         return {{
             "entity_count": row[0],
             "total_records": row[1],
             "earliest_timestamp": str(row[2]) if row[2] else None,
             "latest_timestamp": str(row[3]) if row[3] else None,
         }}
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 '''
@@ -412,7 +411,7 @@ def _generate_search_route(config: UseCaseConfig) -> str:
     """Generate search route for Cortex Search."""
     search_services = config.cortex_services.search
     service_name = search_services[0].name if search_services else "SEARCH_SERVICE"
-    
+
     return f'''"""Search route for Cortex Search."""
 
 import os
@@ -463,15 +462,15 @@ def get_connection():
 async def search(request: SearchRequest):
     """Search documents using Cortex Search."""
     start_time = time.time()
-    
+
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         escaped_query = request.query.replace("'", "''")
-        
+
         sql = f"""
-            SELECT 
+            SELECT
                 SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
                     '{{settings.DATABASE}}.{{settings.CORTEX_SCHEMA}}.{service_name}',
                     '{{"query": "{{escaped_query}}", "columns": ["document_name", "chunk_text", "section"], "limit": {{request.limit}}}}'
@@ -479,9 +478,9 @@ async def search(request: SearchRequest):
         """
         cursor.execute(sql)
         result = cursor.fetchone()
-        
+
         latency_ms = int((time.time() - start_time) * 1000)
-        
+
         if result and result[0]:
             import json
             data = json.loads(result[0]) if isinstance(result[0], str) else result[0]
@@ -496,13 +495,13 @@ async def search(request: SearchRequest):
             ]
         else:
             results = []
-        
+
         return SearchResponse(
             results=results,
             query=request.query,
             latency_ms=latency_ms,
         )
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 '''
@@ -512,7 +511,7 @@ def _generate_predict_route(config: UseCaseConfig) -> str:
     """Generate prediction route for ML models."""
     models = config.ml_models
     model_names = [m.name for m in models]
-    
+
     return f'''"""Prediction route for ML models."""
 
 import os
@@ -563,20 +562,20 @@ async def list_models():
 async def predict(request: PredictRequest):
     """Make a prediction using a registered model."""
     start_time = time.time()
-    
+
     if request.model_name not in AVAILABLE_MODELS:
         raise HTTPException(
-            status_code=404, 
+            status_code=404,
             detail=f"Model '{{request.model_name}}' not found. Available: {{AVAILABLE_MODELS}}"
         )
-    
+
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         import json
         features_json = json.dumps(request.features)
-        
+
         sql = f"""
             SELECT {{settings.DATABASE}}.{{settings.ML_SCHEMA}}.{{request.model_name.upper()}}_PREDICT(
                 PARSE_JSON('{{features_json}}')
@@ -584,23 +583,23 @@ async def predict(request: PredictRequest):
         """
         cursor.execute(sql)
         result = cursor.fetchone()
-        
+
         latency_ms = int((time.time() - start_time) * 1000)
-        
+
         prediction = result[0] if result else None
         probability = None
-        
+
         if isinstance(prediction, dict):
             probability = prediction.get("probability")
             prediction = prediction.get("prediction", prediction)
-        
+
         return PredictResponse(
             model_name=request.model_name,
             prediction=prediction,
             probability=probability,
             latency_ms=latency_ms,
         )
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 '''
@@ -608,13 +607,13 @@ async def predict(request: PredictRequest):
 
 def _generate_requirements() -> str:
     """Generate requirements.txt."""
-    return '''fastapi>=0.109.0
+    return """fastapi>=0.109.0
 uvicorn>=0.27.0
 snowflake-connector-python>=3.0.0
 snowflake-snowpark-python>=1.20.0
 pydantic>=2.0.0
 python-dotenv>=1.0.0
-'''
+"""
 
 
 def _generate_config_py(config: UseCaseConfig) -> str:
@@ -624,7 +623,7 @@ def _generate_config_py(config: UseCaseConfig) -> str:
         primary = config.data.structured[0]
         if primary.entity_column:
             entities = [primary.entity_column]
-    
+
     return f'''"""Application configuration."""
 
 import os
@@ -640,9 +639,9 @@ class Settings:
     DOCS_SCHEMA: str = "{config.snowflake.docs_schema}"
     CORTEX_SCHEMA: str = "{config.snowflake.cortex_schema}"
     ORCHESTRATOR_SCHEMA: str = "{config.snowflake.orchestrator_schema}"
-    
+
     ENTITIES: list = None
-    
+
     def __post_init__(self):
         self.DATABASE = os.getenv("SNOWFLAKE_DATABASE", self.DATABASE)
         self.ENTITIES = {entities if entities else []}
@@ -659,24 +658,24 @@ def _generate_frontend(config: UseCaseConfig, output_dir: Path) -> None:
     (output_dir / "src" / "components").mkdir(exist_ok=True)
     (output_dir / "src" / "pages").mkdir(exist_ok=True)
     (output_dir / "src" / "hooks").mkdir(exist_ok=True)
-    
+
     package_json = _generate_package_json(config)
     (output_dir / "package.json").write_text(package_json)
-    
+
     app_tsx = _generate_app_tsx(config)
     (output_dir / "src" / "App.tsx").write_text(app_tsx)
-    
+
     index_tsx = _generate_index_tsx(config)
     (output_dir / "src" / "index.tsx").write_text(index_tsx)
-    
+
     for page in config.app.pages:
         page_tsx = _generate_page_tsx(page, config)
         page_filename = page.name.replace(" ", "") + ".tsx"
         (output_dir / "src" / "pages" / page_filename).write_text(page_tsx)
-    
+
     api_hook = _generate_api_hook(config)
     (output_dir / "src" / "hooks" / "useApi.ts").write_text(api_hook)
-    
+
     for component in _get_unique_components(config):
         comp_tsx = _generate_component_tsx(component, config)
         comp_filename = _component_type_to_filename(component)
@@ -686,7 +685,7 @@ def _generate_frontend(config: UseCaseConfig, output_dir: Path) -> None:
 def _generate_package_json(config: UseCaseConfig) -> str:
     """Generate package.json."""
     app_name = config.app.name.lower().replace(" ", "-").replace("_", "-")
-    
+
     return f'''{{
   "name": "{app_name}",
   "version": "1.0.0",
@@ -719,13 +718,13 @@ def _generate_app_tsx(config: UseCaseConfig) -> str:
     """Generate main App.tsx with routing."""
     routes = []
     imports = []
-    
+
     for page in config.app.pages:
         page_name = page.name.replace(" ", "")
         imports.append(f"import {page_name} from './pages/{page_name}';")
         routes.append(f'        <Route path="{page.route}" element={{<{page_name} />}} />')
-    
-    return f'''import React from 'react';
+
+    return f"""import React from 'react';
 import {{ BrowserRouter, Routes, Route, Link }} from 'react-router-dom';
 import {{ QueryClient, QueryClientProvider }} from '@tanstack/react-query';
 
@@ -762,12 +761,12 @@ export default function App() {{
     </QueryClientProvider>
   );
 }}
-'''
+"""
 
 
 def _generate_index_tsx(config: UseCaseConfig) -> str:
     """Generate index.tsx entry point."""
-    return '''import React from 'react';
+    return """import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
@@ -777,25 +776,25 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>
 );
-'''
+"""
 
 
 def _generate_page_tsx(page: PageSpec, config: UseCaseConfig) -> str:
     """Generate a page component."""
     page_name = page.name.replace(" ", "")
-    
+
     component_imports = []
     component_renders = []
-    
+
     for comp in page.components:
         comp_name = _component_type_to_name(comp.component_type)
         component_imports.append(f"import {comp_name} from '../components/{comp_name}';")
         props = f'title="{comp.title}"' if comp.title else ""
         component_renders.append(f"        <{comp_name} {props} />")
-    
+
     component_imports = list(set(component_imports))
-    
-    return f'''import React from 'react';
+
+    return f"""import React from 'react';
 {chr(10).join(component_imports)}
 
 export default function {page_name}() {{
@@ -803,19 +802,19 @@ export default function {page_name}() {{
     <div className="max-w-7xl mx-auto">
       <h2 className="text-2xl font-bold mb-4">{page.name}</h2>
       <p className="text-gray-600 mb-6">{page.description or ""}</p>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 {chr(10).join(component_renders)}
       </div>
     </div>
   );
 }}
-'''
+"""
 
 
 def _generate_api_hook(config: UseCaseConfig) -> str:
     """Generate useApi hook."""
-    return '''import { useQuery, useMutation } from '@tanstack/react-query';
+    return """import { useQuery, useMutation } from '@tanstack/react-query';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
@@ -827,11 +826,11 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> 
     },
     ...options,
   });
-  
+
   if (!response.ok) {
     throw new Error(`API error: ${response.statusText}`);
   }
-  
+
   return response.json();
 }
 
@@ -876,10 +875,10 @@ export function useSummary() {
     queryFn: () => fetchApi<any>('/summary'),
   });
 }
-'''
+"""
 
 
-def _get_unique_components(config: UseCaseConfig) -> List[ComponentType]:
+def _get_unique_components(config: UseCaseConfig) -> list[ComponentType]:
     """Get unique component types across all pages."""
     types = set()
     for page in config.app.pages:
@@ -915,7 +914,7 @@ def _component_type_to_filename(comp_type: ComponentType) -> str:
 def _generate_component_tsx(comp_type: ComponentType, config: UseCaseConfig) -> str:
     """Generate a React component."""
     comp_name = _component_type_to_name(comp_type)
-    
+
     if comp_type == ComponentType.CHAT:
         return _generate_chat_component()
     elif comp_type == ComponentType.LIVE_GAUGES:
@@ -934,7 +933,7 @@ def _generate_component_tsx(comp_type: ComponentType, config: UseCaseConfig) -> 
 
 def _generate_chat_component() -> str:
     """Generate Chat component."""
-    return '''import React, { useState } from 'react';
+    return """import React, { useState } from 'react';
 import { Send } from 'lucide-react';
 import { useChat } from '../hooks/useApi';
 
@@ -950,11 +949,11 @@ export default function Chat({ title = "AI Assistant" }: { title?: string }) {
 
   const handleSend = async () => {
     if (!input.trim()) return;
-    
+
     const userMessage = { role: 'user' as const, content: input };
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
-    
+
     try {
       const response = await chat.mutateAsync(input);
       setMessages((prev) => [
@@ -972,7 +971,7 @@ export default function Chat({ title = "AI Assistant" }: { title?: string }) {
   return (
     <div className="bg-white rounded-lg shadow p-4 col-span-2">
       <h3 className="font-semibold mb-4">{title}</h3>
-      
+
       <div className="h-64 overflow-y-auto border rounded p-2 mb-4 space-y-2">
         {messages.map((msg, i) => (
           <div
@@ -990,7 +989,7 @@ export default function Chat({ title = "AI Assistant" }: { title?: string }) {
           </div>
         )}
       </div>
-      
+
       <div className="flex gap-2">
         <input
           type="text"
@@ -1011,12 +1010,12 @@ export default function Chat({ title = "AI Assistant" }: { title?: string }) {
     </div>
   );
 }
-'''
+"""
 
 
 def _generate_gauges_component(config: UseCaseConfig) -> str:
     """Generate LiveGauges component."""
-    return '''import React from 'react';
+    return """import React from 'react';
 import { Activity } from 'lucide-react';
 
 interface GaugeProps {
@@ -1029,7 +1028,7 @@ interface GaugeProps {
 
 function Gauge({ label, value, unit, min = 0, max = 100 }: GaugeProps) {
   const percentage = ((value - min) / (max - min)) * 100;
-  
+
   return (
     <div className="bg-gray-50 rounded p-3">
       <div className="text-sm text-gray-600">{label}</div>
@@ -1059,7 +1058,7 @@ export default function LiveGauges({ title = "Live Parameters" }: { title?: stri
         <Activity className="text-green-500" size={20} />
         <h3 className="font-semibold">{title}</h3>
       </div>
-      
+
       <div className="grid grid-cols-2 gap-3">
         {gauges.map((gauge) => (
           <Gauge key={gauge.label} {...gauge} />
@@ -1068,12 +1067,12 @@ export default function LiveGauges({ title = "Live Parameters" }: { title?: stri
     </div>
   );
 }
-'''
+"""
 
 
 def _generate_alert_component() -> str:
     """Generate AlertFeed component."""
-    return '''import React from 'react';
+    return """import React from 'react';
 import { AlertTriangle, AlertCircle, Info } from 'lucide-react';
 
 interface Alert {
@@ -1101,7 +1100,7 @@ export default function AlertFeed({ title = "Active Alerts" }: { title?: string 
   return (
     <div className="bg-white rounded-lg shadow p-4">
       <h3 className="font-semibold mb-4">{title}</h3>
-      
+
       <div className="space-y-2">
         {alerts.map((alert) => (
           <div key={alert.id} className="flex items-start gap-2 p-2 bg-gray-50 rounded">
@@ -1116,12 +1115,12 @@ export default function AlertFeed({ title = "Active Alerts" }: { title?: string 
     </div>
   );
 }
-'''
+"""
 
 
 def _generate_kpi_component() -> str:
     """Generate KPICards component."""
-    return '''import React from 'react';
+    return """import React from 'react';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { useSummary } from '../hooks/useApi';
 
@@ -1141,7 +1140,7 @@ export default function KPICards({ title }: { title?: string }) {
   return (
     <div className="bg-white rounded-lg shadow p-4 col-span-full">
       {title && <h3 className="font-semibold mb-4">{title}</h3>}
-      
+
       <div className="grid grid-cols-3 gap-4">
         {kpis.map((kpi) => (
           <div key={kpi.label} className="text-center p-4 bg-gray-50 rounded">
@@ -1157,12 +1156,12 @@ export default function KPICards({ title }: { title?: string }) {
     </div>
   );
 }
-'''
+"""
 
 
 def _generate_search_component() -> str:
     """Generate DocumentSearch component."""
-    return '''import React, { useState } from 'react';
+    return """import React, { useState } from 'react';
 import { Search } from 'lucide-react';
 import { useSearch } from '../hooks/useApi';
 
@@ -1179,7 +1178,7 @@ export default function DocumentSearch({ title = "Search" }: { title?: string })
   return (
     <div className="bg-white rounded-lg shadow p-4 col-span-full">
       <h3 className="font-semibold mb-4">{title}</h3>
-      
+
       <div className="flex gap-2 mb-4">
         <input
           type="text"
@@ -1197,9 +1196,9 @@ export default function DocumentSearch({ title = "Search" }: { title?: string })
           <Search size={20} />
         </button>
       </div>
-      
+
       {search.isPending && <div className="text-gray-500">Searching...</div>}
-      
+
       {search.data?.results && (
         <div className="space-y-3">
           {search.data.results.map((result: any, i: number) => (
@@ -1216,12 +1215,12 @@ export default function DocumentSearch({ title = "Search" }: { title?: string })
     </div>
   );
 }
-'''
+"""
 
 
 def _generate_table_component() -> str:
     """Generate StatisticsTable component."""
-    return '''import React from 'react';
+    return """import React from 'react';
 import { useEntities } from '../hooks/useApi';
 
 export default function StatisticsTable({ title = "Statistics" }: { title?: string }) {
@@ -1234,7 +1233,7 @@ export default function StatisticsTable({ title = "Statistics" }: { title?: stri
   return (
     <div className="bg-white rounded-lg shadow p-4 col-span-full overflow-x-auto">
       <h3 className="font-semibold mb-4">{title}</h3>
-      
+
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b">
@@ -1258,7 +1257,7 @@ export default function StatisticsTable({ title = "Statistics" }: { title?: stri
     </div>
   );
 }
-'''
+"""
 
 
 def _generate_generic_component(comp_name: str) -> str:
@@ -1281,9 +1280,8 @@ export default function {comp_name}({{ title = "{comp_name}" }}: {{ title?: stri
 def _generate_spcs_config(config: UseCaseConfig, output_dir: Path) -> None:
     """Generate SPCS deployment configuration."""
     app_name = config.app.name.lower().replace(" ", "-").replace("_", "-")
-    compute_pool = config.app.deployment.compute_pool or "COMPUTE_POOL"
-    
-    spcs_yaml = f'''# SPCS Service Configuration for {config.app.name}
+
+    spcs_yaml = f"""# SPCS Service Configuration for {config.app.name}
 # Generated by Agentic Platform
 
 spec:
@@ -1304,11 +1302,11 @@ spec:
     - name: app
       port: 8000
       public: true
-'''
-    
+"""
+
     (output_dir / "spcs_service.yaml").write_text(spcs_yaml)
-    
-    dockerfile = f'''# Dockerfile for {config.app.name}
+
+    dockerfile = f"""# Dockerfile for {config.app.name}
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -1325,6 +1323,6 @@ EXPOSE 8000
 
 # Run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-'''
-    
+"""
+
     (output_dir / "Dockerfile").write_text(dockerfile)

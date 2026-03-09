@@ -1,17 +1,17 @@
 """Quality validator - checks for null ratios, outliers, and duplicates."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
 class QualityResult:
     passed: bool
-    checks: List[Dict[str, Any]]
+    checks: list[dict[str, Any]]
     score: float
-    issues: List[str]
+    issues: list[str]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "passed": self.passed,
             "checks": self.checks,
@@ -26,10 +26,10 @@ class QualityValidator:
     def __init__(self, session=None):
         self._session = session
 
-    def _execute(self, sql: str) -> List[Dict]:
+    def _execute(self, sql: str) -> list[dict]:
         if self._session is None:
             return []
-        if hasattr(self._session, 'sql'):
+        if hasattr(self._session, "sql"):
             result = self._session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -47,15 +47,15 @@ class QualityValidator:
         self,
         table_name: str,
         max_null_ratio: float = 0.3,
-    ) -> Dict[str, Any]:
-        parts = table_name.split('.')
+    ) -> dict[str, Any]:
+        parts = table_name.split(".")
         if len(parts) == 3:
             db, schema, table = parts
         elif len(parts) == 2:
             db, schema, table = None, parts[0], parts[1]
         else:
             db, schema, table = None, None, parts[0]
-        
+
         info_schema = f"{db}.INFORMATION_SCHEMA" if db else "INFORMATION_SCHEMA"
         col_sql = f"""
             SELECT COLUMN_NAME
@@ -113,13 +113,13 @@ class QualityValidator:
     def check_duplicates(
         self,
         table_name: str,
-        key_columns: List[str],
+        key_columns: list[str],
         max_duplicate_ratio: float = 0.01,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         key_cols_str = ", ".join(f'"{c}"' for c in key_columns)
 
         sql = f"""
-            SELECT 
+            SELECT
                 COUNT(*) as total_rows,
                 COUNT(DISTINCT {key_cols_str}) as distinct_rows
             FROM {table_name}
@@ -132,7 +132,7 @@ class QualityValidator:
 
             total = results[0].get("TOTAL_ROWS", 0)
             distinct = results[0].get("DISTINCT_ROWS", 0)
-            
+
             duplicate_count = total - distinct
             duplicate_ratio = duplicate_count / total if total > 0 else 0
 
@@ -156,21 +156,21 @@ class QualityValidator:
     def check_outliers(
         self,
         table_name: str,
-        numeric_columns: List[str],
+        numeric_columns: list[str],
         std_threshold: float = 3.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         outlier_results = {}
 
         for col in numeric_columns:
             sql = f"""
                 WITH stats AS (
-                    SELECT 
+                    SELECT
                         AVG("{col}") as mean_val,
                         STDDEV("{col}") as std_val
                     FROM {table_name}
                     WHERE "{col}" IS NOT NULL
                 )
-                SELECT 
+                SELECT
                     COUNT(*) as outlier_count,
                     (SELECT COUNT(*) FROM {table_name} WHERE "{col}" IS NOT NULL) as total_count
                 FROM {table_name}, stats
@@ -184,7 +184,7 @@ class QualityValidator:
                     outlier_count = results[0].get("OUTLIER_COUNT", 0)
                     total_count = results[0].get("TOTAL_COUNT", 0)
                     outlier_ratio = outlier_count / total_count if total_count > 0 else 0
-                    
+
                     outlier_results[col] = {
                         "outlier_count": outlier_count,
                         "total_count": total_count,
@@ -193,8 +193,9 @@ class QualityValidator:
             except Exception:
                 outlier_results[col] = {"error": True}
 
-        high_outlier_cols = [k for k, v in outlier_results.items() 
-                            if v.get("outlier_ratio", 0) > 0.05]
+        high_outlier_cols = [
+            k for k, v in outlier_results.items() if v.get("outlier_ratio", 0) > 0.05
+        ]
 
         return {
             "check": "outliers",
@@ -207,8 +208,8 @@ class QualityValidator:
     def validate(
         self,
         table_name: str,
-        key_columns: Optional[List[str]] = None,
-        numeric_columns: Optional[List[str]] = None,
+        key_columns: list[str] | None = None,
+        numeric_columns: list[str] | None = None,
         max_null_ratio: float = 0.3,
         max_duplicate_ratio: float = 0.01,
     ) -> QualityResult:
@@ -218,19 +219,25 @@ class QualityValidator:
         null_check = self.check_null_ratios(table_name, max_null_ratio)
         checks.append(null_check)
         if not null_check.get("passed"):
-            issues.append(f"High null ratio columns: {list(null_check.get('violations', {}).keys())}")
+            issues.append(
+                f"High null ratio columns: {list(null_check.get('violations', {}).keys())}"
+            )
 
         if key_columns:
             dup_check = self.check_duplicates(table_name, key_columns, max_duplicate_ratio)
             checks.append(dup_check)
             if not dup_check.get("passed"):
-                issues.append(f"Duplicate ratio {dup_check.get('duplicate_ratio', 0)} exceeds threshold")
+                issues.append(
+                    f"Duplicate ratio {dup_check.get('duplicate_ratio', 0)} exceeds threshold"
+                )
 
         if numeric_columns:
             outlier_check = self.check_outliers(table_name, numeric_columns)
             checks.append(outlier_check)
             if not outlier_check.get("passed"):
-                issues.append(f"High outlier columns: {outlier_check.get('high_outlier_columns', [])}")
+                issues.append(
+                    f"High outlier columns: {outlier_check.get('high_outlier_columns', [])}"
+                )
 
         passed_count = sum(1 for c in checks if c.get("passed"))
         score = passed_count / len(checks) if checks else 0

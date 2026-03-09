@@ -5,8 +5,9 @@ Persists LangGraph checkpoints to Snowflake tables for execution resumability.
 
 import json
 import os
+from collections.abc import Iterator
 from datetime import datetime
-from typing import Any, Dict, Iterator, Optional, Tuple
+from typing import Any
 from uuid import uuid4
 
 from langgraph.checkpoint.base import (
@@ -24,9 +25,9 @@ class SnowflakeCheckpointSaver(BaseCheckpointSaver):
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
-        database: Optional[str] = None,
-        schema: Optional[str] = None,
+        connection_name: str | None = None,
+        database: str | None = None,
+        schema: str | None = None,
         table: str = "LANGGRAPH_CHECKPOINTS",
     ):
         super().__init__()
@@ -46,14 +47,16 @@ class SnowflakeCheckpointSaver(BaseCheckpointSaver):
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
-    def _execute(self, sql: str, params: Optional[Dict] = None) -> list:
-        if hasattr(self.session, 'sql'):
+    def _execute(self, sql: str, params: dict | None = None) -> list:
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -70,15 +73,15 @@ class SnowflakeCheckpointSaver(BaseCheckpointSaver):
     def _get_full_table_name(self) -> str:
         return f"{self.database}.{self.schema}.{self.table}"
 
-    def get_tuple(self, config: Dict[str, Any]) -> Optional[CheckpointTuple]:
+    def get_tuple(self, config: dict[str, Any]) -> CheckpointTuple | None:
         thread_id = config["configurable"]["thread_id"]
         checkpoint_id = config["configurable"].get("checkpoint_id")
 
         table = self._get_full_table_name()
-        
+
         if checkpoint_id:
             sql = f"""
-                SELECT checkpoint_id, thread_id, parent_checkpoint_id, 
+                SELECT checkpoint_id, thread_id, parent_checkpoint_id,
                        checkpoint_data, metadata, created_at
                 FROM {table}
                 WHERE thread_id = '{thread_id}' AND checkpoint_id = '{checkpoint_id}'
@@ -116,7 +119,12 @@ class SnowflakeCheckpointSaver(BaseCheckpointSaver):
             checkpoint=Checkpoint(
                 v=checkpoint_data.get("v", 1),
                 id=row["CHECKPOINT_ID"],
-                ts=checkpoint_data.get("ts", row["CREATED_AT"].isoformat() if row.get("CREATED_AT") else datetime.utcnow().isoformat()),
+                ts=checkpoint_data.get(
+                    "ts",
+                    row["CREATED_AT"].isoformat()
+                    if row.get("CREATED_AT")
+                    else datetime.utcnow().isoformat(),
+                ),
                 channel_values=checkpoint_data.get("channel_values", {}),
                 channel_versions=checkpoint_data.get("channel_versions", {}),
                 versions_seen=checkpoint_data.get("versions_seen", {}),
@@ -127,19 +135,21 @@ class SnowflakeCheckpointSaver(BaseCheckpointSaver):
                     "thread_id": row["THREAD_ID"],
                     "checkpoint_id": row["PARENT_CHECKPOINT_ID"],
                 }
-            } if row.get("PARENT_CHECKPOINT_ID") else None,
+            }
+            if row.get("PARENT_CHECKPOINT_ID")
+            else None,
         )
 
     def list(
         self,
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
         *,
-        filter: Optional[Dict[str, Any]] = None,
-        before: Optional[Dict[str, Any]] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: dict[str, Any] | None = None,
+        limit: int | None = None,
     ) -> Iterator[CheckpointTuple]:
         table = self._get_full_table_name()
-        
+
         where_clauses = []
         if config and "configurable" in config:
             thread_id = config["configurable"].get("thread_id")
@@ -149,7 +159,9 @@ class SnowflakeCheckpointSaver(BaseCheckpointSaver):
         if before and "configurable" in before:
             before_id = before["configurable"].get("checkpoint_id")
             if before_id:
-                where_clauses.append(f"created_at < (SELECT created_at FROM {table} WHERE checkpoint_id = '{before_id}')")
+                where_clauses.append(
+                    f"created_at < (SELECT created_at FROM {table} WHERE checkpoint_id = '{before_id}')"
+                )
 
         where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
         limit_sql = f"LIMIT {limit}" if limit else ""
@@ -194,15 +206,17 @@ class SnowflakeCheckpointSaver(BaseCheckpointSaver):
                         "thread_id": row["THREAD_ID"],
                         "checkpoint_id": row["PARENT_CHECKPOINT_ID"],
                     }
-                } if row.get("PARENT_CHECKPOINT_ID") else None,
+                }
+                if row.get("PARENT_CHECKPOINT_ID")
+                else None,
             )
 
     def put(
         self,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         thread_id = config["configurable"]["thread_id"]
         parent_checkpoint_id = config["configurable"].get("checkpoint_id")
         checkpoint_id = str(uuid4())
@@ -238,7 +252,7 @@ class SnowflakeCheckpointSaver(BaseCheckpointSaver):
 
     def put_writes(
         self,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         writes: list,
         task_id: str,
     ) -> None:

@@ -1,7 +1,7 @@
 """Cortex Search Builder agent - creates search services from chunk tables."""
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.config import get_settings
 
@@ -11,10 +11,10 @@ class CortexSearchBuilder:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
-        database: Optional[str] = None,
-        schema: Optional[str] = None,
-        warehouse: Optional[str] = None,
+        connection_name: str | None = None,
+        database: str | None = None,
+        schema: str | None = None,
+        warehouse: str | None = None,
     ):
         settings = get_settings()
         self.connection_name = connection_name or settings.connection_name
@@ -32,14 +32,16 @@ class CortexSearchBuilder:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
-    def _execute(self, sql: str) -> List[Dict]:
-        if hasattr(self.session, 'sql'):
+    def _execute(self, sql: str) -> list[dict]:
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -53,8 +55,8 @@ class CortexSearchBuilder:
             finally:
                 cursor.close()
 
-    def _get_table_columns(self, table_name: str) -> List[Dict[str, str]]:
-        parts = table_name.split('.')
+    def _get_table_columns(self, table_name: str) -> list[dict[str, str]]:
+        parts = table_name.split(".")
         if len(parts) >= 3:
             db, schema, table = parts[0], parts[1], parts[-1]
         elif len(parts) == 2:
@@ -74,12 +76,12 @@ class CortexSearchBuilder:
         service_name: str,
         source_table: str,
         search_column: str,
-        attribute_columns: Optional[List[str]] = None,
+        attribute_columns: list[str] | None = None,
         target_lag: str = "1 hour",
         embedding_model: str = "snowflake-arctic-embed-m-v1.5",
     ) -> str:
         full_service = f"{self.database}.{self.schema}.{service_name}"
-        
+
         columns = self._get_table_columns(source_table)
         available_cols = {c.get("COLUMN_NAME", "").upper() for c in columns}
 
@@ -89,9 +91,12 @@ class CortexSearchBuilder:
         if attribute_columns:
             valid_attrs = [c for c in attribute_columns if c.upper() in available_cols]
         else:
-            string_cols = [c.get("COLUMN_NAME") for c in columns 
-                         if 'VARCHAR' in c.get("DATA_TYPE", "").upper() 
-                         or 'STRING' in c.get("DATA_TYPE", "").upper()]
+            string_cols = [
+                c.get("COLUMN_NAME")
+                for c in columns
+                if "VARCHAR" in c.get("DATA_TYPE", "").upper()
+                or "STRING" in c.get("DATA_TYPE", "").upper()
+            ]
             valid_attrs = [c for c in string_cols if c.upper() != search_column.upper()][:5]
 
         attr_clause = f"ATTRIBUTES {', '.join(valid_attrs)}" if valid_attrs else ""
@@ -118,17 +123,17 @@ class CortexSearchBuilder:
         self,
         service_name: str,
         query: str,
-        columns: Optional[List[str]] = None,
-        filter_dict: Optional[Dict[str, Any]] = None,
+        columns: list[str] | None = None,
+        filter_dict: dict[str, Any] | None = None,
         limit: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         import json
-        
-        if '.' not in service_name:
+
+        if "." not in service_name:
             service_name = f"{self.database}.{self.schema}.{service_name}"
 
         columns = columns or []
-        
+
         search_spec = {
             "query": query,
             "columns": columns,
@@ -158,7 +163,7 @@ class CortexSearchBuilder:
         except Exception as e:
             return [{"error": str(e)}]
 
-    def list_services(self) -> List[Dict[str, Any]]:
+    def list_services(self) -> list[dict[str, Any]]:
         sql = f"""
             SHOW CORTEX SEARCH SERVICES IN SCHEMA {self.database}.{self.schema}
         """
@@ -168,7 +173,7 @@ class CortexSearchBuilder:
             return []
 
 
-def build_search_service(state: Dict[str, Any]) -> Dict[str, Any]:
+def build_search_service(state: dict[str, Any]) -> dict[str, Any]:
     """LangGraph node function for building Cortex Search service."""
     builder = CortexSearchBuilder()
 
@@ -198,10 +203,13 @@ def build_search_service(state: Dict[str, Any]) -> Dict[str, Any]:
             },
             "search_service": service_ref,
             "current_state": "COMPLETE",
-            "messages": state.get("messages", []) + [{
-                "role": "system",
-                "content": f"Created Cortex Search service: {service_ref}",
-            }],
+            "messages": state.get("messages", [])
+            + [
+                {
+                    "role": "system",
+                    "content": f"Created Cortex Search service: {service_ref}",
+                }
+            ],
         }
     except Exception as e:
         return {

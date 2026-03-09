@@ -2,11 +2,10 @@
 
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import uuid4
 
-from ..state import ExecutionPlan, ExecutionPhase
-
+from ..state import ExecutionPhase, ExecutionPlan
 
 PLAN_PROMPT = """You are an expert at planning AI application workflows.
 
@@ -55,7 +54,7 @@ class PlanGenerator:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         model: str = "mistral-large2",
     ):
         self.connection_name = connection_name or os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
@@ -71,14 +70,16 @@ class PlanGenerator:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
     def _execute(self, sql: str) -> str:
-        if hasattr(self.session, 'sql'):
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return result[0][0] if result else ""
         else:
@@ -95,9 +96,9 @@ class PlanGenerator:
 
     def generate(
         self,
-        requirements: Dict[str, Any],
-        data_profile: Dict[str, Any],
-        available_agents: List[Dict[str, Any]],
+        requirements: dict[str, Any],
+        data_profile: dict[str, Any],
+        available_agents: list[dict[str, Any]],
     ) -> ExecutionPlan:
         prompt = PLAN_PROMPT.format(
             requirements=json.dumps(requirements, indent=2),
@@ -116,8 +117,8 @@ class PlanGenerator:
         response = self._execute(sql)
 
         try:
-            start = response.find('{')
-            end = response.rfind('}') + 1
+            start = response.find("{")
+            end = response.rfind("}") + 1
             if start >= 0 and end > start:
                 json_str = response[start:end]
                 data = json.loads(json_str)
@@ -129,16 +130,18 @@ class PlanGenerator:
         plan_id = str(uuid4())
         phases = []
         for p in data.get("phases", []):
-            phases.append(ExecutionPhase(
-                phase_id=str(uuid4()),
-                phase_name=p.get("phase_name", "Unknown"),
-                phase_order=p.get("phase_order", 0),
-                agent_id=p.get("agent_id", ""),
-                agent_name=p.get("agent_name", ""),
-                config=p.get("config", {}),
-                depends_on=p.get("depends_on", []),
-                expected_outputs=p.get("expected_outputs", []),
-            ))
+            phases.append(
+                ExecutionPhase(
+                    phase_id=str(uuid4()),
+                    phase_name=p.get("phase_name", "Unknown"),
+                    phase_order=p.get("phase_order", 0),
+                    agent_id=p.get("agent_id", ""),
+                    agent_name=p.get("agent_name", ""),
+                    config=p.get("config", {}),
+                    depends_on=p.get("depends_on", []),
+                    expected_outputs=p.get("expected_outputs", []),
+                )
+            )
 
         return ExecutionPlan(
             plan_id=plan_id,
@@ -149,82 +152,96 @@ class PlanGenerator:
             total_phases=len(phases),
         )
 
-    def _default_plan(self, available_agents: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _default_plan(self, available_agents: list[dict[str, Any]]) -> dict[str, Any]:
         phases = []
         order = 1
 
         agent_ids = {a.get("agent_id") for a in available_agents}
 
         if "parquet_processor" in agent_ids:
-            phases.append({
-                "phase_name": "Data Ingestion",
-                "phase_order": order,
-                "agent_id": "parquet_processor",
-                "agent_name": "Parquet Processor",
-                "config": {},
-                "depends_on": [],
-                "expected_outputs": ["table"],
-            })
+            phases.append(
+                {
+                    "phase_name": "Data Ingestion",
+                    "phase_order": order,
+                    "agent_id": "parquet_processor",
+                    "agent_name": "Parquet Processor",
+                    "config": {},
+                    "depends_on": [],
+                    "expected_outputs": ["table"],
+                }
+            )
             order += 1
 
         if "document_chunker" in agent_ids:
-            phases.append({
-                "phase_name": "Document Processing",
-                "phase_order": order,
-                "agent_id": "document_chunker",
-                "agent_name": "Document Chunker",
-                "config": {},
-                "depends_on": [],
-                "expected_outputs": ["chunk_table"],
-            })
+            phases.append(
+                {
+                    "phase_name": "Document Processing",
+                    "phase_order": order,
+                    "agent_id": "document_chunker",
+                    "agent_name": "Document Chunker",
+                    "config": {},
+                    "depends_on": [],
+                    "expected_outputs": ["chunk_table"],
+                }
+            )
             order += 1
 
         if "ml_model_builder" in agent_ids:
-            phases.append({
-                "phase_name": "ML Training",
-                "phase_order": order,
-                "agent_id": "ml_model_builder",
-                "agent_name": "ML Model Builder",
-                "config": {},
-                "depends_on": ["parquet_processor"] if "parquet_processor" in agent_ids else [],
-                "expected_outputs": ["ml_model"],
-            })
+            phases.append(
+                {
+                    "phase_name": "ML Training",
+                    "phase_order": order,
+                    "agent_id": "ml_model_builder",
+                    "agent_name": "ML Model Builder",
+                    "config": {},
+                    "depends_on": ["parquet_processor"] if "parquet_processor" in agent_ids else [],
+                    "expected_outputs": ["ml_model"],
+                }
+            )
             order += 1
 
         if "cortex_search_builder" in agent_ids:
-            phases.append({
-                "phase_name": "Search Setup",
-                "phase_order": order,
-                "agent_id": "cortex_search_builder",
-                "agent_name": "Cortex Search Builder",
-                "config": {},
-                "depends_on": ["document_chunker"] if "document_chunker" in agent_ids else [],
-                "expected_outputs": ["cortex_search_service"],
-            })
+            phases.append(
+                {
+                    "phase_name": "Search Setup",
+                    "phase_order": order,
+                    "agent_id": "cortex_search_builder",
+                    "agent_name": "Cortex Search Builder",
+                    "config": {},
+                    "depends_on": ["document_chunker"] if "document_chunker" in agent_ids else [],
+                    "expected_outputs": ["cortex_search_service"],
+                }
+            )
             order += 1
 
         if "semantic_model_generator" in agent_ids:
-            phases.append({
-                "phase_name": "Semantic Model",
-                "phase_order": order,
-                "agent_id": "semantic_model_generator",
-                "agent_name": "Semantic Model Generator",
-                "config": {},
-                "depends_on": ["parquet_processor"] if "parquet_processor" in agent_ids else [],
-                "expected_outputs": ["semantic_model"],
-            })
+            phases.append(
+                {
+                    "phase_name": "Semantic Model",
+                    "phase_order": order,
+                    "agent_id": "semantic_model_generator",
+                    "agent_name": "Semantic Model Generator",
+                    "config": {},
+                    "depends_on": ["parquet_processor"] if "parquet_processor" in agent_ids else [],
+                    "expected_outputs": ["semantic_model"],
+                }
+            )
             order += 1
 
         if "app_code_generator" in agent_ids:
-            phases.append({
-                "phase_name": "App Generation",
-                "phase_order": order,
-                "agent_id": "app_code_generator",
-                "agent_name": "App Code Generator",
-                "config": {},
-                "depends_on": [p["agent_id"] for p in phases if p["agent_id"] != "app_code_generator"],
-                "expected_outputs": ["generated_code"],
-            })
+            phases.append(
+                {
+                    "phase_name": "App Generation",
+                    "phase_order": order,
+                    "agent_id": "app_code_generator",
+                    "agent_name": "App Code Generator",
+                    "config": {},
+                    "depends_on": [
+                        p["agent_id"] for p in phases if p["agent_id"] != "app_code_generator"
+                    ],
+                    "expected_outputs": ["generated_code"],
+                }
+            )
             order += 1
 
         return {
@@ -235,10 +252,10 @@ class PlanGenerator:
         }
 
 
-def generate_plan(state: Dict[str, Any]) -> Dict[str, Any]:
+def generate_plan(state: dict[str, Any]) -> dict[str, Any]:
     """LangGraph node function to generate execution plan."""
     generator = PlanGenerator()
-    
+
     plan = generator.generate(
         requirements=state.get("parsed_requirements", {}),
         data_profile=state.get("data_profile", {}),
@@ -248,8 +265,11 @@ def generate_plan(state: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "execution_plan": plan.to_dict(),
         "current_phase": "human_approval",
-        "messages": state.get("messages", []) + [{
-            "role": "system",
-            "content": f"Generated plan '{plan.name}' with {plan.total_phases} phases",
-        }],
+        "messages": state.get("messages", [])
+        + [
+            {
+                "role": "system",
+                "content": f"Generated plan '{plan.name}' with {plan.total_phases} phases",
+            }
+        ],
     }

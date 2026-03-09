@@ -1,14 +1,16 @@
 """Database connection utilities for Snowflake."""
 
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator, List, Dict, Any
+from typing import Any
 
 
 def get_connection():
     if os.path.exists("/snowflake/session/token"):
         import snowflake.connector
-        with open("/snowflake/session/token", "r") as f:
+
+        with open("/snowflake/session/token") as f:
             token = f.read()
         return snowflake.connector.connect(
             host=os.environ.get("SNOWFLAKE_HOST"),
@@ -16,8 +18,9 @@ def get_connection():
             authenticator="oauth",
             token=token,
         )
-    
+
     import snowflake.connector
+
     return snowflake.connector.connect(
         connection_name=os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
     )
@@ -34,7 +37,7 @@ def get_cursor() -> Generator:
         conn.close()
 
 
-def execute_query(sql: str, params: tuple = None) -> List[Dict[str, Any]]:
+def execute_query(sql: str, params: tuple = None) -> list[dict[str, Any]]:
     with get_cursor() as cursor:
         cursor.execute(sql, params)
         if cursor.description:

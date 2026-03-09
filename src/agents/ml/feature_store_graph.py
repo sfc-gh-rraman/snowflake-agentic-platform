@@ -6,13 +6,12 @@ States: DISCOVER → ANALYZE → ENGINEER → MATERIALIZE → VALIDATE
 import json
 import operator
 import os
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
 
-from .feature_store import FeatureStore, FeatureDefinition
-
+from .feature_store import FeatureDefinition, FeatureStore
 
 FEATURE_ENGINEERING_PROMPT = """Analyze this table and recommend feature engineering strategies.
 
@@ -49,33 +48,35 @@ Return JSON:
 
 class FeatureStoreState(TypedDict):
     source_table: str
-    target_column: Optional[str]
-    ml_task: Optional[str]
+    target_column: str | None
+    ml_task: str | None
     database: str
     schema: str
-    entity_column: Optional[str]
-    time_column: Optional[str]
-    discovered_features: Annotated[List[Dict[str, Any]], operator.add]
-    analysis: Dict[str, Any]
-    engineered_features: Annotated[List[Dict[str, Any]], operator.add]
-    feature_table: Optional[str]
-    feature_stats: Dict[str, Any]
+    entity_column: str | None
+    time_column: str | None
+    discovered_features: Annotated[list[dict[str, Any]], operator.add]
+    analysis: dict[str, Any]
+    engineered_features: Annotated[list[dict[str, Any]], operator.add]
+    feature_table: str | None
+    feature_stats: dict[str, Any]
     current_state: str
-    errors: Annotated[List[str], operator.add]
-    messages: Annotated[List[Dict[str, str]], operator.add]
+    errors: Annotated[list[str], operator.add]
+    messages: Annotated[list[dict[str, str]], operator.add]
 
 
 def _get_session(connection_name: str):
     if os.path.exists("/snowflake/session/token"):
         from snowflake.snowpark import Session
+
         return Session.builder.getOrCreate()
     else:
         import snowflake.connector
+
         return snowflake.connector.connect(connection_name=connection_name)
 
 
 def _execute(session, sql: str) -> Any:
-    if hasattr(session, 'sql'):
+    if hasattr(session, "sql"):
         result = session.sql(sql).collect()
         return result[0][0] if result else ""
     else:
@@ -88,8 +89,8 @@ def _execute(session, sql: str) -> Any:
             cursor.close()
 
 
-def _execute_query(session, sql: str) -> List[Dict]:
-    if hasattr(session, 'sql'):
+def _execute_query(session, sql: str) -> list[dict]:
+    if hasattr(session, "sql"):
         result = session.sql(sql).collect()
         return [dict(row.asDict()) for row in result]
     else:
@@ -104,7 +105,7 @@ def _execute_query(session, sql: str) -> List[Dict]:
             cursor.close()
 
 
-def discover_features(state: FeatureStoreState) -> Dict[str, Any]:
+def discover_features(state: FeatureStoreState) -> dict[str, Any]:
     """Discover existing features from source table."""
     connection_name = os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
     store = FeatureStore(
@@ -115,14 +116,16 @@ def discover_features(state: FeatureStoreState) -> Dict[str, Any]:
 
     try:
         features = store.discover_features(state["source_table"])
-        
+
         return {
             "discovered_features": [f.to_dict() for f in features],
             "current_state": "ANALYZE",
-            "messages": [{
-                "role": "system",
-                "content": f"Discovered {len(features)} features from {state['source_table']}",
-            }],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"Discovered {len(features)} features from {state['source_table']}",
+                }
+            ],
         }
     except Exception as e:
         return {
@@ -131,13 +134,13 @@ def discover_features(state: FeatureStoreState) -> Dict[str, Any]:
         }
 
 
-def analyze_for_engineering(state: FeatureStoreState) -> Dict[str, Any]:
+def analyze_for_engineering(state: FeatureStoreState) -> dict[str, Any]:
     """Analyze table to determine optimal feature engineering strategies."""
     connection_name = os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
     session = _get_session(connection_name)
 
     columns = state.get("discovered_features", [])
-    
+
     sample_sql = f"SELECT * FROM {state['source_table']} LIMIT 5"
     try:
         sample_data = _execute_query(session, sample_sql)
@@ -162,9 +165,9 @@ def analyze_for_engineering(state: FeatureStoreState) -> Dict[str, Any]:
 
     try:
         response = _execute(session, sql)
-        
-        json_start = response.find('{')
-        json_end = response.rfind('}') + 1
+
+        json_start = response.find("{")
+        json_end = response.rfind("}") + 1
         if json_start >= 0 and json_end > json_start:
             analysis = json.loads(response[json_start:json_end])
         else:
@@ -175,31 +178,38 @@ def analyze_for_engineering(state: FeatureStoreState) -> Dict[str, Any]:
     return {
         "analysis": analysis,
         "current_state": "ENGINEER",
-        "messages": [{
-            "role": "system",
-            "content": f"Analyzed table for feature engineering opportunities",
-        }],
+        "messages": [
+            {
+                "role": "system",
+                "content": "Analyzed table for feature engineering opportunities",
+            }
+        ],
     }
 
 
-def _default_analysis(state: FeatureStoreState) -> Dict[str, Any]:
+def _default_analysis(state: FeatureStoreState) -> dict[str, Any]:
     """Generate default analysis when LLM fails."""
     numeric_cols = [
-        f["name"] for f in state.get("discovered_features", [])
-        if f.get("category") == "numeric"
+        f["name"] for f in state.get("discovered_features", []) if f.get("category") == "numeric"
     ]
     temporal_cols = [
-        f["name"] for f in state.get("discovered_features", [])
-        if f.get("category") == "temporal"
+        f["name"] for f in state.get("discovered_features", []) if f.get("category") == "temporal"
     ]
     categorical_cols = [
-        f["name"] for f in state.get("discovered_features", [])
+        f["name"]
+        for f in state.get("discovered_features", [])
         if f.get("category") == "categorical"
     ]
 
     entity_col = state.get("entity_column") or (
-        next((c for c in [f["name"] for f in state.get("discovered_features", [])]
-              if "id" in c.lower()), None)
+        next(
+            (
+                c
+                for c in [f["name"] for f in state.get("discovered_features", [])]
+                if "id" in c.lower()
+            ),
+            None,
+        )
     )
     time_col = state.get("time_column") or (temporal_cols[0] if temporal_cols else None)
 
@@ -214,23 +224,27 @@ def _default_analysis(state: FeatureStoreState) -> Dict[str, Any]:
 
     if entity_col and time_col:
         for col in numeric_cols[:3]:
-            analysis["lag_columns"].append({
-                "column": col,
-                "partition_by": entity_col,
-                "order_by": time_col,
-                "lags": [1, 7, 14],
-            })
-            analysis["window_columns"].append({
-                "column": col,
-                "partition_by": entity_col,
-                "order_by": time_col,
-                "windows": [7, 14, 30],
-            })
+            analysis["lag_columns"].append(
+                {
+                    "column": col,
+                    "partition_by": entity_col,
+                    "order_by": time_col,
+                    "lags": [1, 7, 14],
+                }
+            )
+            analysis["window_columns"].append(
+                {
+                    "column": col,
+                    "partition_by": entity_col,
+                    "order_by": time_col,
+                    "windows": [7, 14, 30],
+                }
+            )
 
     return analysis
 
 
-def engineer_features(state: FeatureStoreState) -> Dict[str, Any]:
+def engineer_features(state: FeatureStoreState) -> dict[str, Any]:
     """Generate engineered features based on analysis."""
     connection_name = os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
     store = FeatureStore(
@@ -280,27 +294,31 @@ def engineer_features(state: FeatureStoreState) -> Dict[str, Any]:
             else:
                 expr = f'"{cols[0]}" * "{cols[1]}"'
 
-            all_features.append(FeatureDefinition(
-                name=f"{cols[0]}_{op}_{cols[1]}".upper(),
-                expression=expr,
-                data_type="FLOAT",
-                description=f"Interaction: {cols[0]} {op} {cols[1]}",
-                category="numeric",
-                is_derived=True,
-                source_columns=cols,
-            ))
+            all_features.append(
+                FeatureDefinition(
+                    name=f"{cols[0]}_{op}_{cols[1]}".upper(),
+                    expression=expr,
+                    data_type="FLOAT",
+                    description=f"Interaction: {cols[0]} {op} {cols[1]}",
+                    category="numeric",
+                    is_derived=True,
+                    source_columns=cols,
+                )
+            )
 
     return {
-        "engineered_features": [f.to_dict() if hasattr(f, 'to_dict') else f for f in all_features],
+        "engineered_features": [f.to_dict() if hasattr(f, "to_dict") else f for f in all_features],
         "current_state": "MATERIALIZE",
-        "messages": [{
-            "role": "system",
-            "content": f"Engineered {len(all_features)} features",
-        }],
+        "messages": [
+            {
+                "role": "system",
+                "content": f"Engineered {len(all_features)} features",
+            }
+        ],
     }
 
 
-def materialize_features(state: FeatureStoreState) -> Dict[str, Any]:
+def materialize_features(state: FeatureStoreState) -> dict[str, Any]:
     """Materialize features into a feature table."""
     connection_name = os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
     store = FeatureStore(
@@ -336,10 +354,12 @@ def materialize_features(state: FeatureStoreState) -> Dict[str, Any]:
         return {
             "feature_table": result,
             "current_state": "VALIDATE",
-            "messages": [{
-                "role": "system",
-                "content": f"Materialized feature table: {result}",
-            }],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"Materialized feature table: {result}",
+                }
+            ],
         }
     except Exception as e:
         return {
@@ -348,7 +368,7 @@ def materialize_features(state: FeatureStoreState) -> Dict[str, Any]:
         }
 
 
-def validate_features(state: FeatureStoreState) -> Dict[str, Any]:
+def validate_features(state: FeatureStoreState) -> dict[str, Any]:
     """Validate materialized feature table."""
     connection_name = os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
     store = FeatureStore(
@@ -365,8 +385,7 @@ def validate_features(state: FeatureStoreState) -> Dict[str, Any]:
         }
 
     engineered_names = [
-        f["name"] for f in state.get("engineered_features", [])
-        if f.get("is_derived")
+        f["name"] for f in state.get("engineered_features", []) if f.get("is_derived")
     ]
 
     try:
@@ -383,10 +402,12 @@ def validate_features(state: FeatureStoreState) -> Dict[str, Any]:
             "feature_stats": stats,
             "current_state": "COMPLETE",
             "errors": issues if issues else [],
-            "messages": [{
-                "role": "system",
-                "content": f"Validated {len(stats)} features. Issues: {len(issues)}",
-            }],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"Validated {len(stats)} features. Issues: {len(issues)}",
+                }
+            ],
         }
     except Exception as e:
         return {
@@ -400,7 +421,7 @@ def route_after_state(state: FeatureStoreState) -> str:
     current = state.get("current_state", "")
     if current == "FAILED" or current == "COMPLETE":
         return END
-    
+
     state_map = {
         "DISCOVER": "analyze",
         "ANALYZE": "engineer",
@@ -436,11 +457,11 @@ def run_feature_store_pipeline(
     source_table: str,
     database: str = "AGENTIC_PLATFORM",
     schema: str = "ML",
-    target_column: Optional[str] = None,
-    ml_task: Optional[str] = None,
-    entity_column: Optional[str] = None,
-    time_column: Optional[str] = None,
-) -> Dict[str, Any]:
+    target_column: str | None = None,
+    ml_task: str | None = None,
+    entity_column: str | None = None,
+    time_column: str | None = None,
+) -> dict[str, Any]:
     """Run the feature store pipeline."""
     graph = build_feature_store_graph()
 

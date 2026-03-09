@@ -6,13 +6,10 @@ States: ANALYZE_TABLE → CLASSIFY_COLUMNS → GENERATE_YAML → CREATE_VERIFIED
 import json
 import operator
 import os
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
-
-from .model_generator import SemanticModelGenerator
-
 
 VERIFIED_QUERY_PROMPT = """Generate verified queries for this semantic model.
 
@@ -37,30 +34,32 @@ class SemanticGraphState(TypedDict):
     business_context: str
     database: str
     schema: str
-    columns: List[Dict[str, str]]
-    sample_data: List[Dict[str, Any]]
-    dimensions: List[Dict[str, str]]
-    facts: List[Dict[str, str]]
-    yaml_content: Optional[str]
-    verified_queries: List[Dict[str, str]]
-    validation_result: Optional[Dict[str, Any]]
-    stage_path: Optional[str]
+    columns: list[dict[str, str]]
+    sample_data: list[dict[str, Any]]
+    dimensions: list[dict[str, str]]
+    facts: list[dict[str, str]]
+    yaml_content: str | None
+    verified_queries: list[dict[str, str]]
+    validation_result: dict[str, Any] | None
+    stage_path: str | None
     current_state: str
-    errors: Annotated[List[str], operator.add]
-    messages: Annotated[List[Dict[str, str]], operator.add]
+    errors: Annotated[list[str], operator.add]
+    messages: Annotated[list[dict[str, str]], operator.add]
 
 
 def _get_session(connection_name: str):
     if os.path.exists("/snowflake/session/token"):
         from snowflake.snowpark import Session
+
         return Session.builder.getOrCreate()
     else:
         import snowflake.connector
+
         return snowflake.connector.connect(connection_name=connection_name)
 
 
-def _execute_query(session, sql: str) -> List[Dict]:
-    if hasattr(session, 'sql'):
+def _execute_query(session, sql: str) -> list[dict]:
+    if hasattr(session, "sql"):
         result = session.sql(sql).collect()
         return [dict(row.asDict()) for row in result]
     else:
@@ -76,7 +75,7 @@ def _execute_query(session, sql: str) -> List[Dict]:
 
 
 def _execute(session, sql: str) -> Any:
-    if hasattr(session, 'sql'):
+    if hasattr(session, "sql"):
         result = session.sql(sql).collect()
         return result[0][0] if result else ""
     else:
@@ -89,7 +88,7 @@ def _execute(session, sql: str) -> Any:
             cursor.close()
 
 
-def analyze_table(state: SemanticGraphState) -> Dict[str, Any]:
+def analyze_table(state: SemanticGraphState) -> dict[str, Any]:
     """Analyze source table structure."""
     connection_name = os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
     session = _get_session(connection_name)
@@ -111,7 +110,7 @@ def analyze_table(state: SemanticGraphState) -> Dict[str, Any]:
 
     try:
         columns = _execute_query(session, col_sql)
-        
+
         if not columns:
             return {
                 "errors": [f"Table {table_name} not found"],
@@ -125,10 +124,12 @@ def analyze_table(state: SemanticGraphState) -> Dict[str, Any]:
             "columns": columns,
             "sample_data": sample_data,
             "current_state": "CLASSIFY_COLUMNS",
-            "messages": [{
-                "role": "system",
-                "content": f"Analyzed table with {len(columns)} columns",
-            }],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"Analyzed table with {len(columns)} columns",
+                }
+            ],
         }
     except Exception as e:
         return {
@@ -137,7 +138,7 @@ def analyze_table(state: SemanticGraphState) -> Dict[str, Any]:
         }
 
 
-def classify_columns(state: SemanticGraphState) -> Dict[str, Any]:
+def classify_columns(state: SemanticGraphState) -> dict[str, Any]:
     """Classify columns into dimensions and facts."""
     columns = state.get("columns", [])
     dimensions = []
@@ -148,48 +149,76 @@ def classify_columns(state: SemanticGraphState) -> Dict[str, Any]:
         data_type = col.get("DATA_TYPE", "")
         col_lower = col_name.lower()
 
-        is_date = any(t in data_type.upper() for t in ['DATE', 'TIME', 'TIMESTAMP'])
-        is_string = any(t in data_type.upper() for t in ['VARCHAR', 'STRING', 'TEXT'])
-        is_numeric = any(t in data_type.upper() for t in ['NUMBER', 'FLOAT', 'INT', 'DOUBLE', 'DECIMAL'])
+        is_date = any(t in data_type.upper() for t in ["DATE", "TIME", "TIMESTAMP"])
+        is_string = any(t in data_type.upper() for t in ["VARCHAR", "STRING", "TEXT"])
+        is_numeric = any(
+            t in data_type.upper() for t in ["NUMBER", "FLOAT", "INT", "DOUBLE", "DECIMAL"]
+        )
 
-        is_id = any(kw in col_lower for kw in ['_id', 'id_', 'key', 'code'])
-        is_category = any(kw in col_lower for kw in ['type', 'status', 'category', 'class', 'name', 'region', 'country'])
-        is_measure = any(kw in col_lower for kw in ['amount', 'count', 'total', 'sum', 'avg', 'price', 'cost', 'value', 'quantity', 'rate', 'score'])
+        is_id = any(kw in col_lower for kw in ["_id", "id_", "key", "code"])
+        is_category = any(
+            kw in col_lower
+            for kw in ["type", "status", "category", "class", "name", "region", "country"]
+        )
+        is_measure = any(
+            kw in col_lower
+            for kw in [
+                "amount",
+                "count",
+                "total",
+                "sum",
+                "avg",
+                "price",
+                "cost",
+                "value",
+                "quantity",
+                "rate",
+                "score",
+            ]
+        )
 
         if is_date or is_id or is_category or (is_string and not is_measure):
-            dimensions.append({
-                "name": col_name,
-                "expr": f'"{col_name}"',
-                "data_type": data_type,
-                "description": f"{col_name} dimension",
-            })
+            dimensions.append(
+                {
+                    "name": col_name,
+                    "expr": f'"{col_name}"',
+                    "data_type": data_type,
+                    "description": f"{col_name} dimension",
+                }
+            )
         elif is_numeric and (is_measure or not is_id):
-            facts.append({
-                "name": col_name,
-                "expr": f'"{col_name}"',
-                "data_type": data_type,
-                "description": f"{col_name} measure",
-            })
+            facts.append(
+                {
+                    "name": col_name,
+                    "expr": f'"{col_name}"',
+                    "data_type": data_type,
+                    "description": f"{col_name} measure",
+                }
+            )
         else:
-            dimensions.append({
-                "name": col_name,
-                "expr": f'"{col_name}"',
-                "data_type": data_type,
-                "description": f"{col_name}",
-            })
+            dimensions.append(
+                {
+                    "name": col_name,
+                    "expr": f'"{col_name}"',
+                    "data_type": data_type,
+                    "description": f"{col_name}",
+                }
+            )
 
     return {
         "dimensions": dimensions[:15],
         "facts": facts[:10],
         "current_state": "GENERATE_YAML",
-        "messages": [{
-            "role": "system",
-            "content": f"Classified {len(dimensions)} dimensions and {len(facts)} facts",
-        }],
+        "messages": [
+            {
+                "role": "system",
+                "content": f"Classified {len(dimensions)} dimensions and {len(facts)} facts",
+            }
+        ],
     }
 
 
-def generate_yaml(state: SemanticGraphState) -> Dict[str, Any]:
+def generate_yaml(state: SemanticGraphState) -> dict[str, Any]:
     """Generate semantic model YAML."""
     model_name = state["model_name"]
     table_name = state["source_table"]
@@ -208,36 +237,42 @@ def generate_yaml(state: SemanticGraphState) -> Dict[str, Any]:
     if dimensions:
         yaml_lines.append("    dimensions:")
         for dim in dimensions:
-            yaml_lines.extend([
-                f"      - name: {dim['name']}",
-                f"        expr: {dim['expr']}",
-                f"        data_type: {dim['data_type']}",
-                f"        description: {dim['description']}",
-            ])
+            yaml_lines.extend(
+                [
+                    f"      - name: {dim['name']}",
+                    f"        expr: {dim['expr']}",
+                    f"        data_type: {dim['data_type']}",
+                    f"        description: {dim['description']}",
+                ]
+            )
 
     if facts:
         yaml_lines.append("    facts:")
         for fact in facts:
-            yaml_lines.extend([
-                f"      - name: {fact['name']}",
-                f"        expr: {fact['expr']}",
-                f"        data_type: {fact['data_type']}",
-                f"        description: {fact['description']}",
-            ])
+            yaml_lines.extend(
+                [
+                    f"      - name: {fact['name']}",
+                    f"        expr: {fact['expr']}",
+                    f"        data_type: {fact['data_type']}",
+                    f"        description: {fact['description']}",
+                ]
+            )
 
     yaml_content = "\n".join(yaml_lines)
 
     return {
         "yaml_content": yaml_content,
         "current_state": "CREATE_VERIFIED_QUERIES",
-        "messages": [{
-            "role": "system",
-            "content": "Generated semantic model YAML",
-        }],
+        "messages": [
+            {
+                "role": "system",
+                "content": "Generated semantic model YAML",
+            }
+        ],
     }
 
 
-def create_verified_queries(state: SemanticGraphState) -> Dict[str, Any]:
+def create_verified_queries(state: SemanticGraphState) -> dict[str, Any]:
     """Generate verified queries using LLM."""
     connection_name = os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
     session = _get_session(connection_name)
@@ -263,9 +298,9 @@ def create_verified_queries(state: SemanticGraphState) -> Dict[str, Any]:
 
     try:
         response = _execute(session, sql)
-        
-        json_start = response.find('[')
-        json_end = response.rfind(']') + 1
+
+        json_start = response.find("[")
+        json_end = response.rfind("]") + 1
         if json_start >= 0 and json_end > json_start:
             verified_queries = json.loads(response[json_start:json_end])
         else:
@@ -278,21 +313,23 @@ def create_verified_queries(state: SemanticGraphState) -> Dict[str, Any]:
         yaml_content += "\n\nverified_queries:"
         for vq in verified_queries[:8]:
             yaml_content += f"\n  - name: {vq.get('name', 'query')}"
-            yaml_content += f"\n    question: \"{vq.get('question', '')}\""
-            yaml_content += f"\n    sql: \"{vq.get('sql', '')}\""
+            yaml_content += f'\n    question: "{vq.get("question", "")}"'
+            yaml_content += f'\n    sql: "{vq.get("sql", "")}"'
 
     return {
         "verified_queries": verified_queries,
         "yaml_content": yaml_content,
         "current_state": "VALIDATE",
-        "messages": [{
-            "role": "system",
-            "content": f"Created {len(verified_queries)} verified queries",
-        }],
+        "messages": [
+            {
+                "role": "system",
+                "content": f"Created {len(verified_queries)} verified queries",
+            }
+        ],
     }
 
 
-def _default_verified_queries(state: SemanticGraphState) -> List[Dict[str, str]]:
+def _default_verified_queries(state: SemanticGraphState) -> list[dict[str, str]]:
     """Generate default verified queries."""
     table_name = state["source_table"]
     facts = state.get("facts", [])
@@ -308,31 +345,39 @@ def _default_verified_queries(state: SemanticGraphState) -> List[Dict[str, str]]
 
     if facts:
         first_fact = facts[0]["name"]
-        queries.append({
-            "name": f"total_{first_fact.lower()}",
-            "question": f"What is the total {first_fact}?",
-            "sql": f"SELECT SUM(\"{first_fact}\") FROM {table_name}",
-        })
-        queries.append({
-            "name": f"avg_{first_fact.lower()}",
-            "question": f"What is the average {first_fact}?",
-            "sql": f"SELECT AVG(\"{first_fact}\") FROM {table_name}",
-        })
+        queries.append(
+            {
+                "name": f"total_{first_fact.lower()}",
+                "question": f"What is the total {first_fact}?",
+                "sql": f'SELECT SUM("{first_fact}") FROM {table_name}',
+            }
+        )
+        queries.append(
+            {
+                "name": f"avg_{first_fact.lower()}",
+                "question": f"What is the average {first_fact}?",
+                "sql": f'SELECT AVG("{first_fact}") FROM {table_name}',
+            }
+        )
 
-    date_dims = [d for d in dimensions if any(t in d.get("data_type", "").upper() for t in ["DATE", "TIME"])]
+    date_dims = [
+        d for d in dimensions if any(t in d.get("data_type", "").upper() for t in ["DATE", "TIME"])
+    ]
     if date_dims and facts:
         date_col = date_dims[0]["name"]
         fact_col = facts[0]["name"]
-        queries.append({
-            "name": "daily_trend",
-            "question": f"What is the daily trend of {fact_col}?",
-            "sql": f"SELECT DATE_TRUNC('day', \"{date_col}\") as day, SUM(\"{fact_col}\") as total FROM {table_name} GROUP BY 1 ORDER BY 1",
-        })
+        queries.append(
+            {
+                "name": "daily_trend",
+                "question": f"What is the daily trend of {fact_col}?",
+                "sql": f'SELECT DATE_TRUNC(\'day\', "{date_col}") as day, SUM("{fact_col}") as total FROM {table_name} GROUP BY 1 ORDER BY 1',
+            }
+        )
 
     return queries
 
 
-def validate_model(state: SemanticGraphState) -> Dict[str, Any]:
+def validate_model(state: SemanticGraphState) -> dict[str, Any]:
     """Validate the semantic model."""
     connection_name = os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
     session = _get_session(connection_name)
@@ -344,7 +389,7 @@ def validate_model(state: SemanticGraphState) -> Dict[str, Any]:
         sql = vq.get("sql", "")
         if not sql:
             continue
-        
+
         try:
             explain_sql = f"EXPLAIN {sql}"
             _execute(session, explain_sql)
@@ -356,10 +401,12 @@ def validate_model(state: SemanticGraphState) -> Dict[str, Any]:
     return {
         "validation_result": validation_results,
         "current_state": "COMPLETE",
-        "messages": [{
-            "role": "system",
-            "content": f"Validated {validation_results['valid_queries']} queries, {validation_results['invalid_queries']} invalid",
-        }],
+        "messages": [
+            {
+                "role": "system",
+                "content": f"Validated {validation_results['valid_queries']} queries, {validation_results['invalid_queries']} invalid",
+            }
+        ],
     }
 
 
@@ -390,7 +437,7 @@ def run_semantic_pipeline(
     database: str = "AGENTIC_PLATFORM",
     schema: str = "ANALYTICS",
     business_context: str = "General analytics",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run the semantic model creation pipeline."""
     graph = build_semantic_graph()
 

@@ -2,10 +2,9 @@
 
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ..state import ParsedRequirements, TaskType
-
 
 PARSE_PROMPT = """You are an expert at analyzing AI application requirements.
 
@@ -37,7 +36,7 @@ class UseCaseParser:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         model: str = "mistral-large2",
     ):
         self.connection_name = connection_name or os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
@@ -53,14 +52,16 @@ class UseCaseParser:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
     def _execute(self, sql: str) -> str:
-        if hasattr(self.session, 'sql'):
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return result[0][0] if result else ""
         else:
@@ -87,10 +88,10 @@ class UseCaseParser:
         """
 
         response = self._execute(sql)
-        
+
         try:
-            start = response.find('{')
-            end = response.rfind('}') + 1
+            start = response.find("{")
+            end = response.rfind("}") + 1
             if start >= 0 and end > start:
                 json_str = response[start:end]
                 data = json.loads(json_str)
@@ -101,7 +102,11 @@ class UseCaseParser:
 
         return ParsedRequirements(
             primary_task=TaskType(data.get("primary_task", "analytics")),
-            secondary_tasks=[TaskType(t) for t in data.get("secondary_tasks", []) if t in [e.value for e in TaskType]],
+            secondary_tasks=[
+                TaskType(t)
+                for t in data.get("secondary_tasks", [])
+                if t in [e.value for e in TaskType]
+            ],
             target_variable=data.get("target_variable"),
             search_enabled=data.get("search_enabled", False),
             analytics_enabled=data.get("analytics_enabled", False),
@@ -113,7 +118,7 @@ class UseCaseParser:
             constraints=data.get("constraints", {}),
         )
 
-    def _default_requirements(self) -> Dict[str, Any]:
+    def _default_requirements(self) -> dict[str, Any]:
         return {
             "primary_task": "analytics",
             "secondary_tasks": [],
@@ -129,16 +134,19 @@ class UseCaseParser:
         }
 
 
-def parse_use_case(state: Dict[str, Any]) -> Dict[str, Any]:
+def parse_use_case(state: dict[str, Any]) -> dict[str, Any]:
     """LangGraph node function to parse use case."""
     parser = UseCaseParser()
     requirements = parser.parse(state["use_case_description"])
-    
+
     return {
         "parsed_requirements": requirements.to_dict(),
         "current_phase": "scan_data",
-        "messages": state.get("messages", []) + [{
-            "role": "system",
-            "content": f"Parsed requirements: {requirements.primary_task.value} task detected",
-        }],
+        "messages": state.get("messages", [])
+        + [
+            {
+                "role": "system",
+                "content": f"Parsed requirements: {requirements.primary_task.value} task detected",
+            }
+        ],
     }

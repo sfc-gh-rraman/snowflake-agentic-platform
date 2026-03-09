@@ -6,13 +6,12 @@ States: VALIDATE_SOURCE → CONFIGURE → CREATE_SERVICE → TEST_SERVICE → CO
 import json
 import operator
 import os
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
 
 from .search_builder import CortexSearchBuilder
-
 
 SEARCH_CONFIG_PROMPT = """Analyze this chunk table and recommend optimal Cortex Search configuration.
 
@@ -41,30 +40,32 @@ class SearchGraphState(TypedDict):
     service_name: str
     database: str
     schema: str
-    columns: List[Dict[str, str]]
-    sample_data: List[Dict[str, Any]]
-    search_column: Optional[str]
-    attribute_columns: Optional[List[str]]
+    columns: list[dict[str, str]]
+    sample_data: list[dict[str, Any]]
+    search_column: str | None
+    attribute_columns: list[str] | None
     target_lag: str
     embedding_model: str
-    search_service: Optional[str]
-    test_results: Optional[Dict[str, Any]]
+    search_service: str | None
+    test_results: dict[str, Any] | None
     current_state: str
-    errors: Annotated[List[str], operator.add]
-    messages: Annotated[List[Dict[str, str]], operator.add]
+    errors: Annotated[list[str], operator.add]
+    messages: Annotated[list[dict[str, str]], operator.add]
 
 
 def _get_session(connection_name: str):
     if os.path.exists("/snowflake/session/token"):
         from snowflake.snowpark import Session
+
         return Session.builder.getOrCreate()
     else:
         import snowflake.connector
+
         return snowflake.connector.connect(connection_name=connection_name)
 
 
-def _execute_query(session, sql: str) -> List[Dict]:
-    if hasattr(session, 'sql'):
+def _execute_query(session, sql: str) -> list[dict]:
+    if hasattr(session, "sql"):
         result = session.sql(sql).collect()
         return [dict(row.asDict()) for row in result]
     else:
@@ -80,7 +81,7 @@ def _execute_query(session, sql: str) -> List[Dict]:
 
 
 def _execute(session, sql: str) -> Any:
-    if hasattr(session, 'sql'):
+    if hasattr(session, "sql"):
         result = session.sql(sql).collect()
         return result[0][0] if result else ""
     else:
@@ -93,7 +94,7 @@ def _execute(session, sql: str) -> Any:
             cursor.close()
 
 
-def validate_source(state: SearchGraphState) -> Dict[str, Any]:
+def validate_source(state: SearchGraphState) -> dict[str, Any]:
     """Validate source table exists and get column info."""
     connection_name = os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
     session = _get_session(connection_name)
@@ -115,7 +116,7 @@ def validate_source(state: SearchGraphState) -> Dict[str, Any]:
 
     try:
         columns = _execute_query(session, col_sql)
-        
+
         if not columns:
             return {
                 "errors": [f"Table {table_name} not found or has no columns"],
@@ -129,10 +130,12 @@ def validate_source(state: SearchGraphState) -> Dict[str, Any]:
             "columns": columns,
             "sample_data": sample_data,
             "current_state": "CONFIGURE",
-            "messages": [{
-                "role": "system",
-                "content": f"Validated source table with {len(columns)} columns",
-            }],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"Validated source table with {len(columns)} columns",
+                }
+            ],
         }
     except Exception as e:
         return {
@@ -141,7 +144,7 @@ def validate_source(state: SearchGraphState) -> Dict[str, Any]:
         }
 
 
-def configure_service(state: SearchGraphState) -> Dict[str, Any]:
+def configure_service(state: SearchGraphState) -> dict[str, Any]:
     """Configure search service parameters using LLM analysis."""
     if state.get("search_column"):
         return {
@@ -168,9 +171,9 @@ def configure_service(state: SearchGraphState) -> Dict[str, Any]:
 
     try:
         response = _execute(session, sql)
-        
-        json_start = response.find('{')
-        json_end = response.rfind('}') + 1
+
+        json_start = response.find("{")
+        json_end = response.rfind("}") + 1
         if json_start >= 0 and json_end > json_start:
             config = json.loads(response[json_start:json_end])
         else:
@@ -184,22 +187,25 @@ def configure_service(state: SearchGraphState) -> Dict[str, Any]:
         "target_lag": config.get("target_lag", "1 hour"),
         "embedding_model": config.get("embedding_model", "snowflake-arctic-embed-m-v1.5"),
         "current_state": "CREATE_SERVICE",
-        "messages": [{
-            "role": "system",
-            "content": f"Configured search on column: {config.get('search_column')}",
-        }],
+        "messages": [
+            {
+                "role": "system",
+                "content": f"Configured search on column: {config.get('search_column')}",
+            }
+        ],
     }
 
 
-def _default_config(state: SearchGraphState) -> Dict[str, Any]:
+def _default_config(state: SearchGraphState) -> dict[str, Any]:
     """Generate default configuration when LLM fails."""
     columns = state.get("columns", [])
-    
+
     text_columns = [
-        c["COLUMN_NAME"] for c in columns
+        c["COLUMN_NAME"]
+        for c in columns
         if any(t in c.get("DATA_TYPE", "").upper() for t in ["VARCHAR", "STRING", "TEXT"])
     ]
-    
+
     search_col = None
     for candidate in ["CHUNK", "CONTENT", "TEXT", "BODY", "DOCUMENT"]:
         for col in text_columns:
@@ -208,7 +214,7 @@ def _default_config(state: SearchGraphState) -> Dict[str, Any]:
                 break
         if search_col:
             break
-    
+
     if not search_col and text_columns:
         search_col = max(text_columns, key=len) if text_columns else text_columns[0]
 
@@ -223,7 +229,7 @@ def _default_config(state: SearchGraphState) -> Dict[str, Any]:
     }
 
 
-def create_service(state: SearchGraphState) -> Dict[str, Any]:
+def create_service(state: SearchGraphState) -> dict[str, Any]:
     """Create the Cortex Search service."""
     connection_name = os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
     builder = CortexSearchBuilder(
@@ -252,10 +258,12 @@ def create_service(state: SearchGraphState) -> Dict[str, Any]:
         return {
             "search_service": service_ref,
             "current_state": "TEST_SERVICE",
-            "messages": [{
-                "role": "system",
-                "content": f"Created Cortex Search service: {service_ref}",
-            }],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"Created Cortex Search service: {service_ref}",
+                }
+            ],
         }
     except Exception as e:
         return {
@@ -264,7 +272,7 @@ def create_service(state: SearchGraphState) -> Dict[str, Any]:
         }
 
 
-def test_service(state: SearchGraphState) -> Dict[str, Any]:
+def test_service(state: SearchGraphState) -> dict[str, Any]:
     """Test the created search service with sample queries."""
     connection_name = os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
     builder = CortexSearchBuilder(
@@ -290,12 +298,14 @@ def test_service(state: SearchGraphState) -> Dict[str, Any]:
                 query=query,
                 limit=3,
             )
-            
-            test_results["queries"].append({
-                "query": query,
-                "result_count": len(results),
-                "has_results": len(results) > 0,
-            })
+
+            test_results["queries"].append(
+                {
+                    "query": query,
+                    "result_count": len(results),
+                    "has_results": len(results) > 0,
+                }
+            )
         except Exception as e:
             test_results["errors"].append(f"Query '{query}' failed: {str(e)}")
             test_results["success"] = False
@@ -303,10 +313,12 @@ def test_service(state: SearchGraphState) -> Dict[str, Any]:
     return {
         "test_results": test_results,
         "current_state": "COMPLETE",
-        "messages": [{
-            "role": "system",
-            "content": f"Tested search service. Success: {test_results['success']}",
-        }],
+        "messages": [
+            {
+                "role": "system",
+                "content": f"Tested search service. Success: {test_results['success']}",
+            }
+        ],
     }
 
 
@@ -334,9 +346,9 @@ def run_search_pipeline(
     service_name: str,
     database: str = "AGENTIC_PLATFORM",
     schema: str = "CORTEX",
-    search_column: Optional[str] = None,
-    attribute_columns: Optional[List[str]] = None,
-) -> Dict[str, Any]:
+    search_column: str | None = None,
+    attribute_columns: list[str] | None = None,
+) -> dict[str, Any]:
     """Run the search service creation pipeline."""
     graph = build_search_graph()
 

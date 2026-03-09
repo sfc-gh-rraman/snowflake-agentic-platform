@@ -1,7 +1,7 @@
 """Data scanner tool - discovers and profiles data assets."""
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..state import DataAsset, DataProfile, DataType
 
@@ -11,7 +11,7 @@ class DataScanner:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         database: str = "AGENTIC_PLATFORM",
     ):
         self.connection_name = connection_name or os.getenv("SNOWFLAKE_CONNECTION_NAME", "default")
@@ -27,14 +27,16 @@ class DataScanner:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
-    def _execute(self, sql: str) -> List[Dict]:
-        if hasattr(self.session, 'sql'):
+    def _execute(self, sql: str) -> list[dict]:
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -49,19 +51,19 @@ class DataScanner:
                 cursor.close()
 
     def _detect_file_type(self, filename: str) -> DataType:
-        ext = filename.lower().split('.')[-1] if '.' in filename else ''
+        ext = filename.lower().split(".")[-1] if "." in filename else ""
         type_map = {
-            'parquet': DataType.PARQUET,
-            'csv': DataType.CSV,
-            'json': DataType.JSON,
-            'pdf': DataType.PDF,
-            'docx': DataType.DOCX,
-            'txt': DataType.TXT,
+            "parquet": DataType.PARQUET,
+            "csv": DataType.CSV,
+            "json": DataType.JSON,
+            "pdf": DataType.PDF,
+            "docx": DataType.DOCX,
+            "txt": DataType.TXT,
         }
         return type_map.get(ext, DataType.UNKNOWN)
 
-    def scan_stage(self, stage_path: str) -> List[DataAsset]:
-        if not stage_path.startswith('@'):
+    def scan_stage(self, stage_path: str) -> list[DataAsset]:
+        if not stage_path.startswith("@"):
             stage_path = f"@{stage_path}"
 
         sql = f"LIST {stage_path}"
@@ -74,22 +76,24 @@ class DataScanner:
         for row in results:
             name = row.get("name", "")
             size = row.get("size", 0)
-            
+
             file_type = self._detect_file_type(name)
             if file_type == DataType.UNKNOWN:
                 continue
 
-            assets.append(DataAsset(
-                name=name.split('/')[-1],
-                location=f"{stage_path}/{name}",
-                data_type=file_type,
-                size_bytes=size,
-            ))
+            assets.append(
+                DataAsset(
+                    name=name.split("/")[-1],
+                    location=f"{stage_path}/{name}",
+                    data_type=file_type,
+                    size_bytes=size,
+                )
+            )
 
         return assets
 
-    def scan_table(self, table_name: str) -> Optional[DataAsset]:
-        parts = table_name.split('.')
+    def scan_table(self, table_name: str) -> DataAsset | None:
+        parts = table_name.split(".")
         if len(parts) == 3:
             db, schema, table = parts
         elif len(parts) == 2:
@@ -101,7 +105,7 @@ class DataScanner:
             table = parts[0]
 
         sql = f"""
-            SELECT 
+            SELECT
                 ROW_COUNT,
                 BYTES
             FROM {db}.INFORMATION_SCHEMA.TABLES
@@ -116,7 +120,7 @@ class DataScanner:
             return None
 
         row = results[0]
-        
+
         col_sql = f"""
             SELECT COLUMN_NAME, DATA_TYPE
             FROM {db}.INFORMATION_SCHEMA.COLUMNS
@@ -136,7 +140,7 @@ class DataScanner:
             schema=schema_dict,
         )
 
-    def profile_assets(self, assets: List[DataAsset]) -> DataProfile:
+    def profile_assets(self, assets: list[DataAsset]) -> DataProfile:
         structured_types = {DataType.PARQUET, DataType.CSV, DataType.JSON, DataType.TABLE}
         unstructured_types = {DataType.PDF, DataType.DOCX, DataType.TXT}
 
@@ -151,9 +155,11 @@ class DataScanner:
             if asset.schema:
                 for col, dtype in asset.schema.items():
                     col_lower = col.lower()
-                    if any(t in col_lower for t in ['target', 'label', 'class', 'outcome', 'status']):
+                    if any(
+                        t in col_lower for t in ["target", "label", "class", "outcome", "status"]
+                    ):
                         potential_targets.append(col)
-                    elif dtype in ['NUMBER', 'FLOAT', 'INTEGER', 'DOUBLE']:
+                    elif dtype in ["NUMBER", "FLOAT", "INTEGER", "DOUBLE"]:
                         potential_features.append(col)
 
         return DataProfile(
@@ -170,13 +176,13 @@ class DataScanner:
         )
 
 
-def scan_data(state: Dict[str, Any]) -> Dict[str, Any]:
+def scan_data(state: dict[str, Any]) -> dict[str, Any]:
     """LangGraph node function to scan data assets."""
     scanner = DataScanner()
-    
+
     all_assets = []
     for location in state.get("data_locations", []):
-        if location.startswith('@'):
+        if location.startswith("@"):
             all_assets.extend(scanner.scan_stage(location))
         else:
             asset = scanner.scan_table(location)
@@ -193,8 +199,11 @@ def scan_data(state: Dict[str, Any]) -> Dict[str, Any]:
         "data_assets": [a.to_dict() for a in all_assets],
         "data_profile": profile.to_dict(),
         "current_phase": "query_registry",
-        "messages": state.get("messages", []) + [{
-            "role": "system",
-            "content": f"Discovered {len(all_assets)} data assets: {profile.structured_count} structured, {profile.unstructured_count} unstructured",
-        }],
+        "messages": state.get("messages", [])
+        + [
+            {
+                "role": "system",
+                "content": f"Discovered {len(all_assets)} data assets: {profile.structured_count} structured, {profile.unstructured_count} unstructured",
+            }
+        ],
     }

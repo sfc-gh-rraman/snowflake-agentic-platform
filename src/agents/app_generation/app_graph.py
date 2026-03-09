@@ -1,30 +1,31 @@
 """LangGraph state machine for App Code Generator agent."""
 
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Annotated
-from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.base import BaseCheckpointSaver
 import operator
 import os
+from typing import Annotated, Any, Literal, TypedDict
+
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.graph import END, StateGraph
 
 from .code_generator import AppCodeGenerator, AppGeneratorState, AppSpec
 
 
 class AppGraphState(TypedDict):
     use_case: str
-    tables: List[str]
-    models: Optional[List[str]]
-    search_services: Optional[List[str]]
-    semantic_models: Optional[List[str]]
+    tables: list[str]
+    models: list[str] | None
+    search_services: list[str] | None
+    semantic_models: list[str] | None
     output_dir: str
     llm_model: str
-    app_spec: Optional[Dict[str, Any]]
-    react_files: Dict[str, str]
-    backend_files: Dict[str, str]
-    deployment_files: Dict[str, str]
-    validation_results: Dict[str, Any]
+    app_spec: dict[str, Any] | None
+    react_files: dict[str, str]
+    backend_files: dict[str, str]
+    deployment_files: dict[str, str]
+    validation_results: dict[str, Any]
     current_state: str
-    errors: Annotated[List[str], operator.add]
-    messages: Annotated[List[Dict[str, str]], operator.add]
+    errors: Annotated[list[str], operator.add]
+    messages: Annotated[list[dict[str, str]], operator.add]
 
 
 def create_generator(state: AppGraphState) -> AppCodeGenerator:
@@ -34,9 +35,9 @@ def create_generator(state: AppGraphState) -> AppCodeGenerator:
     )
 
 
-def app_spec_node(state: AppGraphState) -> Dict[str, Any]:
+def app_spec_node(state: AppGraphState) -> dict[str, Any]:
     generator = create_generator(state)
-    
+
     try:
         spec = generator.generate_app_spec(
             use_case=state["use_case"],
@@ -45,11 +46,16 @@ def app_spec_node(state: AppGraphState) -> Dict[str, Any]:
             search_services=state.get("search_services"),
             semantic_models=state.get("semantic_models"),
         )
-        
+
         return {
             "app_spec": spec.to_dict(),
             "current_state": AppGeneratorState.REACT_CODE_GENERATION.value,
-            "messages": [{"role": "system", "content": f"APP_SPEC_GENERATION: Generated spec for '{spec.app_name}' with {len(spec.pages)} pages"}],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"APP_SPEC_GENERATION: Generated spec for '{spec.app_name}' with {len(spec.pages)} pages",
+                }
+            ],
         }
     except Exception as e:
         return {
@@ -59,9 +65,9 @@ def app_spec_node(state: AppGraphState) -> Dict[str, Any]:
         }
 
 
-def react_code_node(state: AppGraphState) -> Dict[str, Any]:
+def react_code_node(state: AppGraphState) -> dict[str, Any]:
     generator = create_generator(state)
-    
+
     spec_dict = state.get("app_spec", {})
     spec = AppSpec(
         app_name=spec_dict.get("app_name", "Generated App"),
@@ -70,26 +76,33 @@ def react_code_node(state: AppGraphState) -> Dict[str, Any]:
         data_sources=spec_dict.get("data_sources", []),
         features=spec_dict.get("features", []),
     )
-    
+
     try:
         react_files = generator.generate_react_components(spec)
-        
+
         return {
             "react_files": react_files,
             "current_state": AppGeneratorState.FASTAPI_CODE_GENERATION.value,
-            "messages": [{"role": "system", "content": f"REACT_CODE_GENERATION: Generated {len(react_files)} React files"}],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"REACT_CODE_GENERATION: Generated {len(react_files)} React files",
+                }
+            ],
         }
     except Exception as e:
         return {
             "current_state": AppGeneratorState.FAILED.value,
             "errors": [f"REACT_CODE_GENERATION failed: {str(e)}"],
-            "messages": [{"role": "system", "content": f"REACT_CODE_GENERATION: Failed - {str(e)}"}],
+            "messages": [
+                {"role": "system", "content": f"REACT_CODE_GENERATION: Failed - {str(e)}"}
+            ],
         }
 
 
-def fastapi_code_node(state: AppGraphState) -> Dict[str, Any]:
+def fastapi_code_node(state: AppGraphState) -> dict[str, Any]:
     generator = create_generator(state)
-    
+
     spec_dict = state.get("app_spec", {})
     spec = AppSpec(
         app_name=spec_dict.get("app_name", "Generated App"),
@@ -98,26 +111,33 @@ def fastapi_code_node(state: AppGraphState) -> Dict[str, Any]:
         data_sources=spec_dict.get("data_sources", []),
         features=spec_dict.get("features", []),
     )
-    
+
     try:
         backend_files = generator.generate_fastapi_backend(spec)
-        
+
         return {
             "backend_files": backend_files,
             "current_state": AppGeneratorState.DEPLOYMENT_CONFIG_GENERATION.value,
-            "messages": [{"role": "system", "content": f"FASTAPI_CODE_GENERATION: Generated {len(backend_files)} backend files"}],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"FASTAPI_CODE_GENERATION: Generated {len(backend_files)} backend files",
+                }
+            ],
         }
     except Exception as e:
         return {
             "current_state": AppGeneratorState.FAILED.value,
             "errors": [f"FASTAPI_CODE_GENERATION failed: {str(e)}"],
-            "messages": [{"role": "system", "content": f"FASTAPI_CODE_GENERATION: Failed - {str(e)}"}],
+            "messages": [
+                {"role": "system", "content": f"FASTAPI_CODE_GENERATION: Failed - {str(e)}"}
+            ],
         }
 
 
-def deployment_config_node(state: AppGraphState) -> Dict[str, Any]:
+def deployment_config_node(state: AppGraphState) -> dict[str, Any]:
     generator = create_generator(state)
-    
+
     spec_dict = state.get("app_spec", {})
     spec = AppSpec(
         app_name=spec_dict.get("app_name", "Generated App"),
@@ -126,48 +146,55 @@ def deployment_config_node(state: AppGraphState) -> Dict[str, Any]:
         data_sources=spec_dict.get("data_sources", []),
         features=spec_dict.get("features", []),
     )
-    
+
     try:
         deployment_files = generator.generate_deployment_config(spec)
-        
+
         return {
             "deployment_files": deployment_files,
             "current_state": AppGeneratorState.TEST_AND_VALIDATE.value,
-            "messages": [{"role": "system", "content": f"DEPLOYMENT_CONFIG_GENERATION: Generated {len(deployment_files)} deployment files"}],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"DEPLOYMENT_CONFIG_GENERATION: Generated {len(deployment_files)} deployment files",
+                }
+            ],
         }
     except Exception as e:
         return {
             "current_state": AppGeneratorState.FAILED.value,
             "errors": [f"DEPLOYMENT_CONFIG_GENERATION failed: {str(e)}"],
-            "messages": [{"role": "system", "content": f"DEPLOYMENT_CONFIG_GENERATION: Failed - {str(e)}"}],
+            "messages": [
+                {"role": "system", "content": f"DEPLOYMENT_CONFIG_GENERATION: Failed - {str(e)}"}
+            ],
         }
 
 
-def test_and_validate_node(state: AppGraphState) -> Dict[str, Any]:
+def test_and_validate_node(state: AppGraphState) -> dict[str, Any]:
     validation_results = {
         "react": {"status": "passed", "checks": []},
         "backend": {"status": "passed", "checks": []},
         "deployment": {"status": "passed", "checks": []},
     }
-    
+
     react_files = state.get("react_files", {})
     if "App.tsx" not in react_files:
         validation_results["react"]["status"] = "warning"
         validation_results["react"]["checks"].append("Missing App.tsx entry point")
     else:
         validation_results["react"]["checks"].append("App.tsx present")
-    
+
     backend_files = state.get("backend_files", {})
     if "main.py" not in backend_files:
         validation_results["backend"]["status"] = "warning"
         validation_results["backend"]["checks"].append("Missing main.py entry point")
     else:
         validation_results["backend"]["checks"].append("main.py present")
-    
+
     for name, content in backend_files.items():
         if "import " in content and "fastapi" in content.lower():
             validation_results["backend"]["checks"].append(f"{name}: FastAPI imports valid")
-    
+
     deployment_files = state.get("deployment_files", {})
     if "Dockerfile" in deployment_files:
         validation_results["deployment"]["checks"].append("Dockerfile present")
@@ -175,13 +202,13 @@ def test_and_validate_node(state: AppGraphState) -> Dict[str, Any]:
         validation_results["deployment"]["checks"].append("requirements.txt present")
     if "spcs_service.yaml" in deployment_files:
         validation_results["deployment"]["checks"].append("SPCS spec present")
-    
+
     output_dir = state.get("output_dir", "./generated_app")
     all_files = {}
     all_files.update({f"frontend/src/{k}": v for k, v in react_files.items()})
     all_files.update({f"backend/{k}": v for k, v in backend_files.items()})
     all_files.update(deployment_files)
-    
+
     try:
         for rel_path, content in all_files.items():
             full_path = os.path.join(output_dir, rel_path)
@@ -191,17 +218,24 @@ def test_and_validate_node(state: AppGraphState) -> Dict[str, Any]:
         validation_results["files_written"] = len(all_files)
     except Exception as e:
         validation_results["write_error"] = str(e)
-    
+
     return {
         "validation_results": validation_results,
         "current_state": AppGeneratorState.COMPLETE.value,
-        "messages": [{"role": "system", "content": f"TEST_AND_VALIDATE: Validation complete - {len(all_files)} files generated"}],
+        "messages": [
+            {
+                "role": "system",
+                "content": f"TEST_AND_VALIDATE: Validation complete - {len(all_files)} files generated",
+            }
+        ],
     }
 
 
-def should_continue(state: AppGraphState) -> Literal["react_code", "fastapi_code", "deployment_config", "test_validate", "end"]:
+def should_continue(
+    state: AppGraphState,
+) -> Literal["react_code", "fastapi_code", "deployment_config", "test_validate", "end"]:
     current = state.get("current_state", "")
-    
+
     if current == AppGeneratorState.FAILED.value:
         return "end"
     elif current == AppGeneratorState.REACT_CODE_GENERATION.value:
@@ -216,24 +250,24 @@ def should_continue(state: AppGraphState) -> Literal["react_code", "fastapi_code
         return "end"
 
 
-def build_app_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> StateGraph:
+def build_app_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
     graph = StateGraph(AppGraphState)
-    
+
     graph.add_node("app_spec", app_spec_node)
     graph.add_node("react_code", react_code_node)
     graph.add_node("fastapi_code", fastapi_code_node)
     graph.add_node("deployment_config", deployment_config_node)
     graph.add_node("test_validate", test_and_validate_node)
-    
+
     graph.set_entry_point("app_spec")
-    
+
     graph.add_conditional_edges(
         "app_spec",
         should_continue,
         {
             "react_code": "react_code",
             "end": END,
-        }
+        },
     )
     graph.add_conditional_edges(
         "react_code",
@@ -241,7 +275,7 @@ def build_app_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> State
         {
             "fastapi_code": "fastapi_code",
             "end": END,
-        }
+        },
     )
     graph.add_conditional_edges(
         "fastapi_code",
@@ -249,7 +283,7 @@ def build_app_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> State
         {
             "deployment_config": "deployment_config",
             "end": END,
-        }
+        },
     )
     graph.add_conditional_edges(
         "deployment_config",
@@ -257,26 +291,26 @@ def build_app_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> State
         {
             "test_validate": "test_validate",
             "end": END,
-        }
+        },
     )
     graph.add_edge("test_validate", END)
-    
+
     return graph.compile(checkpointer=checkpointer)
 
 
 def run_app_pipeline(
     use_case: str,
-    tables: List[str],
-    models: Optional[List[str]] = None,
-    search_services: Optional[List[str]] = None,
-    semantic_models: Optional[List[str]] = None,
+    tables: list[str],
+    models: list[str] | None = None,
+    search_services: list[str] | None = None,
+    semantic_models: list[str] | None = None,
     output_dir: str = "./generated_app",
     llm_model: str = "mistral-large2",
-    checkpointer: Optional[BaseCheckpointSaver] = None,
+    checkpointer: BaseCheckpointSaver | None = None,
     thread_id: str = "app-default",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     graph = build_app_graph(checkpointer)
-    
+
     initial_state: AppGraphState = {
         "use_case": use_case,
         "tables": tables,
@@ -294,8 +328,8 @@ def run_app_pipeline(
         "errors": [],
         "messages": [],
     }
-    
+
     config = {"configurable": {"thread_id": thread_id}}
     result = graph.invoke(initial_state, config)
-    
+
     return result

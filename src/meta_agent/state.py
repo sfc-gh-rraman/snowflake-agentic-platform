@@ -1,11 +1,11 @@
 """State definition for Meta-Agent LangGraph."""
 
-from typing import Any, Dict, List, Literal, Optional, TypedDict
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
+from typing import Any, Literal, TypedDict
 
 
-class DataType(str, Enum):
+class DataType(StrEnum):
     PARQUET = "parquet"
     CSV = "csv"
     JSON = "json"
@@ -16,7 +16,7 @@ class DataType(str, Enum):
     UNKNOWN = "unknown"
 
 
-class TaskType(str, Enum):
+class TaskType(StrEnum):
     CLASSIFICATION = "classification"
     REGRESSION = "regression"
     CLUSTERING = "clustering"
@@ -30,13 +30,13 @@ class DataAsset:
     name: str
     location: str
     data_type: DataType
-    size_bytes: Optional[int] = None
-    row_count: Optional[int] = None
-    column_count: Optional[int] = None
-    schema: Optional[Dict[str, str]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    size_bytes: int | None = None
+    row_count: int | None = None
+    column_count: int | None = None
+    schema: dict[str, str] | None = None
+    metadata: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "location": self.location,
@@ -52,18 +52,18 @@ class DataAsset:
 @dataclass
 class ParsedRequirements:
     primary_task: TaskType
-    secondary_tasks: List[TaskType] = field(default_factory=list)
-    target_variable: Optional[str] = None
+    secondary_tasks: list[TaskType] = field(default_factory=list)
+    target_variable: str | None = None
     search_enabled: bool = False
     analytics_enabled: bool = False
     ml_enabled: bool = False
-    app_type: Optional[str] = None
+    app_type: str | None = None
     deployment_target: str = "spcs"
-    entities: List[str] = field(default_factory=list)
-    key_features: List[str] = field(default_factory=list)
-    constraints: Dict[str, Any] = field(default_factory=dict)
+    entities: list[str] = field(default_factory=list)
+    key_features: list[str] = field(default_factory=list)
+    constraints: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "primary_task": self.primary_task.value,
             "secondary_tasks": [t.value for t in self.secondary_tasks],
@@ -87,12 +87,12 @@ class DataProfile:
     total_rows: int
     total_size_bytes: int
     has_labeled_data: bool
-    potential_target_columns: List[str]
-    potential_features: List[str]
+    potential_target_columns: list[str]
+    potential_features: list[str]
     text_content_detected: bool
-    profiles: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    profiles: dict[str, dict[str, Any]] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "total_assets": self.total_assets,
             "structured_count": self.structured_count,
@@ -112,11 +112,11 @@ class AgentCapability:
     agent_id: str
     name: str
     capability_name: str
-    input_types: List[str]
-    output_types: List[str]
+    input_types: list[str]
+    output_types: list[str]
     priority: int = 50
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "agent_id": self.agent_id,
             "name": self.name,
@@ -134,11 +134,11 @@ class ExecutionPhase:
     phase_order: int
     agent_id: str
     agent_name: str
-    config: Dict[str, Any]
-    depends_on: List[str] = field(default_factory=list)
-    expected_outputs: List[str] = field(default_factory=list)
+    config: dict[str, Any]
+    depends_on: list[str] = field(default_factory=list)
+    expected_outputs: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "phase_id": self.phase_id,
             "phase_name": self.phase_name,
@@ -156,11 +156,11 @@ class ExecutionPlan:
     plan_id: str
     name: str
     description: str
-    phases: List[ExecutionPhase]
+    phases: list[ExecutionPhase]
     estimated_duration_minutes: int
     total_phases: int
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "plan_id": self.plan_id,
             "name": self.name,
@@ -173,23 +173,23 @@ class ExecutionPlan:
 
 class MetaAgentState(TypedDict):
     """LangGraph state for Meta-Agent."""
-    
+
     use_case_description: str
-    data_locations: List[str]
-    
-    data_assets: List[Dict[str, Any]]
-    parsed_requirements: Optional[Dict[str, Any]]
-    data_profile: Optional[Dict[str, Any]]
-    available_agents: List[Dict[str, Any]]
-    execution_plan: Optional[Dict[str, Any]]
-    
+    data_locations: list[str]
+
+    data_assets: list[dict[str, Any]]
+    parsed_requirements: dict[str, Any] | None
+    data_profile: dict[str, Any] | None
+    available_agents: list[dict[str, Any]]
+    execution_plan: dict[str, Any] | None
+
     approval_status: Literal["pending", "approved", "rejected"]
-    approval_feedback: Optional[str]
-    
+    approval_feedback: str | None
+
     current_phase: str
-    error: Optional[str]
-    messages: List[Dict[str, Any]]
-    
-    use_case_config: Optional[Dict[str, Any]]
-    generated_ddls: Optional[str]
-    generated_app: Optional[str]
+    error: str | None
+    messages: list[dict[str, Any]]
+
+    use_case_config: dict[str, Any] | None
+    generated_ddls: str | None
+    generated_app: str | None

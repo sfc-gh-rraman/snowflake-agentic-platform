@@ -5,13 +5,12 @@ Provides CRUD operations for execution plans, phases, agent states, and artifact
 
 import json
 import os
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 from uuid import uuid4
-from enum import Enum
 
 
-class PlanStatus(str, Enum):
+class PlanStatus(StrEnum):
     PENDING = "pending"
     APPROVED = "approved"
     RUNNING = "running"
@@ -20,7 +19,7 @@ class PlanStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class PhaseStatus(str, Enum):
+class PhaseStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -28,7 +27,7 @@ class PhaseStatus(str, Enum):
     SKIPPED = "skipped"
 
 
-class AgentStatus(str, Enum):
+class AgentStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -36,7 +35,7 @@ class AgentStatus(str, Enum):
     RETRYING = "retrying"
 
 
-class ArtifactType(str, Enum):
+class ArtifactType(StrEnum):
     TABLE = "table"
     VIEW = "view"
     STAGE = "stage"
@@ -60,7 +59,7 @@ class StateManager:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         database: str = "AGENTIC_PLATFORM",
         schema: str = "STATE",
     ):
@@ -78,14 +77,16 @@ class StateManager:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
-    def _execute(self, sql: str) -> List[Dict]:
-        if hasattr(self.session, 'sql'):
+    def _execute(self, sql: str) -> list[dict]:
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -102,7 +103,7 @@ class StateManager:
     def _escape(self, value: str) -> str:
         if value is None:
             return "NULL"
-        return f"'{str(value).replace(chr(39), chr(39)+chr(39))}'"
+        return f"'{str(value).replace(chr(39), chr(39) + chr(39))}'"
 
     def _json_escape(self, obj: Any) -> str:
         if obj is None:
@@ -116,13 +117,13 @@ class StateManager:
     def create_execution_plan(
         self,
         use_case_description: str,
-        execution_plan: Dict[str, Any],
-        parsed_requirements: Optional[Dict] = None,
-        data_assets: Optional[List[Dict]] = None,
+        execution_plan: dict[str, Any],
+        parsed_requirements: dict | None = None,
+        data_assets: list[dict] | None = None,
     ) -> str:
         plan_id = str(uuid4())
         sql = f"""
-            INSERT INTO {self._table('AGENT_EXECUTION_PLANS')} 
+            INSERT INTO {self._table("AGENT_EXECUTION_PLANS")}
             (plan_id, use_case_description, parsed_requirements, data_assets, execution_plan)
             VALUES (
                 '{plan_id}',
@@ -135,9 +136,9 @@ class StateManager:
         self._execute(sql)
         return plan_id
 
-    def get_execution_plan(self, plan_id: str) -> Optional[Dict]:
+    def get_execution_plan(self, plan_id: str) -> dict | None:
         sql = f"""
-            SELECT * FROM {self._table('AGENT_EXECUTION_PLANS')}
+            SELECT * FROM {self._table("AGENT_EXECUTION_PLANS")}
             WHERE plan_id = '{plan_id}'
         """
         results = self._execute(sql)
@@ -147,11 +148,13 @@ class StateManager:
         self,
         plan_id: str,
         status: PlanStatus,
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
     ) -> None:
-        completed_at = "CURRENT_TIMESTAMP()" if status in [PlanStatus.COMPLETED, PlanStatus.FAILED] else "NULL"
+        completed_at = (
+            "CURRENT_TIMESTAMP()" if status in [PlanStatus.COMPLETED, PlanStatus.FAILED] else "NULL"
+        )
         sql = f"""
-            UPDATE {self._table('AGENT_EXECUTION_PLANS')}
+            UPDATE {self._table("AGENT_EXECUTION_PLANS")}
             SET status = '{status.value}',
                 error_message = {self._escape(error_message)},
                 completed_at = {completed_at},
@@ -162,7 +165,7 @@ class StateManager:
 
     def approve_plan(self, plan_id: str, approved_by: str) -> None:
         sql = f"""
-            UPDATE {self._table('AGENT_EXECUTION_PLANS')}
+            UPDATE {self._table("AGENT_EXECUTION_PLANS")}
             SET approval_status = 'approved',
                 approved_by = {self._escape(approved_by)},
                 approved_at = CURRENT_TIMESTAMP(),
@@ -174,7 +177,7 @@ class StateManager:
 
     def reject_plan(self, plan_id: str, approved_by: str) -> None:
         sql = f"""
-            UPDATE {self._table('AGENT_EXECUTION_PLANS')}
+            UPDATE {self._table("AGENT_EXECUTION_PLANS")}
             SET approval_status = 'rejected',
                 approved_by = {self._escape(approved_by)},
                 approved_at = CURRENT_TIMESTAMP(),
@@ -189,11 +192,11 @@ class StateManager:
         plan_id: str,
         phase_name: str,
         phase_order: int,
-        config: Optional[Dict] = None,
+        config: dict | None = None,
     ) -> str:
         phase_id = str(uuid4())
         sql = f"""
-            INSERT INTO {self._table('AGENT_PHASE_STATE')}
+            INSERT INTO {self._table("AGENT_PHASE_STATE")}
             (phase_id, plan_id, phase_name, phase_order, config)
             VALUES (
                 '{phase_id}',
@@ -206,17 +209,17 @@ class StateManager:
         self._execute(sql)
         return phase_id
 
-    def get_phase(self, phase_id: str) -> Optional[Dict]:
+    def get_phase(self, phase_id: str) -> dict | None:
         sql = f"""
-            SELECT * FROM {self._table('AGENT_PHASE_STATE')}
+            SELECT * FROM {self._table("AGENT_PHASE_STATE")}
             WHERE phase_id = '{phase_id}'
         """
         results = self._execute(sql)
         return results[0] if results else None
 
-    def get_phases_for_plan(self, plan_id: str) -> List[Dict]:
+    def get_phases_for_plan(self, plan_id: str) -> list[dict]:
         sql = f"""
-            SELECT * FROM {self._table('AGENT_PHASE_STATE')}
+            SELECT * FROM {self._table("AGENT_PHASE_STATE")}
             WHERE plan_id = '{plan_id}'
             ORDER BY phase_order
         """
@@ -226,14 +229,22 @@ class StateManager:
         self,
         phase_id: str,
         status: PhaseStatus,
-        output_artifacts: Optional[Dict] = None,
-        error_message: Optional[str] = None,
+        output_artifacts: dict | None = None,
+        error_message: str | None = None,
     ) -> None:
-        started_at = "COALESCE(started_at, CURRENT_TIMESTAMP())" if status == PhaseStatus.RUNNING else "started_at"
-        completed_at = "CURRENT_TIMESTAMP()" if status in [PhaseStatus.COMPLETED, PhaseStatus.FAILED] else "NULL"
-        
+        started_at = (
+            "COALESCE(started_at, CURRENT_TIMESTAMP())"
+            if status == PhaseStatus.RUNNING
+            else "started_at"
+        )
+        completed_at = (
+            "CURRENT_TIMESTAMP()"
+            if status in [PhaseStatus.COMPLETED, PhaseStatus.FAILED]
+            else "NULL"
+        )
+
         sql = f"""
-            UPDATE {self._table('AGENT_PHASE_STATE')}
+            UPDATE {self._table("AGENT_PHASE_STATE")}
             SET status = '{status.value}',
                 output_artifacts = COALESCE({self._json_escape(output_artifacts)}, output_artifacts),
                 error_message = {self._escape(error_message)},
@@ -249,13 +260,13 @@ class StateManager:
         phase_id: str,
         plan_id: str,
         agent_name: str,
-        agent_version: Optional[str] = None,
-        sub_state: Optional[str] = None,
-        state_data: Optional[Dict] = None,
+        agent_version: str | None = None,
+        sub_state: str | None = None,
+        state_data: dict | None = None,
     ) -> str:
         execution_id = str(uuid4())
         sql = f"""
-            INSERT INTO {self._table('AGENT_EXECUTION_STATE')}
+            INSERT INTO {self._table("AGENT_EXECUTION_STATE")}
             (execution_id, phase_id, plan_id, agent_name, agent_version, sub_state, state_data)
             VALUES (
                 '{execution_id}',
@@ -273,14 +284,14 @@ class StateManager:
     def update_agent_state(
         self,
         execution_id: str,
-        sub_state: Optional[str] = None,
-        state_data: Optional[Dict] = None,
-        status: Optional[AgentStatus] = None,
-        error_message: Optional[str] = None,
-        error_details: Optional[Dict] = None,
+        sub_state: str | None = None,
+        state_data: dict | None = None,
+        status: AgentStatus | None = None,
+        error_message: str | None = None,
+        error_details: dict | None = None,
     ) -> None:
         updates = ["updated_at = CURRENT_TIMESTAMP()"]
-        
+
         if sub_state is not None:
             updates.append(f"sub_state = {self._escape(sub_state)}")
         if state_data is not None:
@@ -299,15 +310,15 @@ class StateManager:
             updates.append(f"error_details = {self._json_escape(error_details)}")
 
         sql = f"""
-            UPDATE {self._table('AGENT_EXECUTION_STATE')}
-            SET {', '.join(updates)}
+            UPDATE {self._table("AGENT_EXECUTION_STATE")}
+            SET {", ".join(updates)}
             WHERE execution_id = '{execution_id}'
         """
         self._execute(sql)
 
-    def get_agent_execution(self, execution_id: str) -> Optional[Dict]:
+    def get_agent_execution(self, execution_id: str) -> dict | None:
         sql = f"""
-            SELECT * FROM {self._table('AGENT_EXECUTION_STATE')}
+            SELECT * FROM {self._table("AGENT_EXECUTION_STATE")}
             WHERE execution_id = '{execution_id}'
         """
         results = self._execute(sql)
@@ -318,19 +329,19 @@ class StateManager:
         artifact_type: ArtifactType,
         artifact_name: str,
         artifact_reference: str,
-        plan_id: Optional[str] = None,
-        phase_id: Optional[str] = None,
-        metadata: Optional[Dict] = None,
-        created_by_agent: Optional[str] = None,
+        plan_id: str | None = None,
+        phase_id: str | None = None,
+        metadata: dict | None = None,
+        created_by_agent: str | None = None,
     ) -> str:
         artifact_id = str(uuid4())
         sql = f"""
-            INSERT INTO {self._table('AGENT_ARTIFACTS')}
+            INSERT INTO {self._table("AGENT_ARTIFACTS")}
             (artifact_id, plan_id, phase_id, artifact_type, artifact_name, artifact_reference, metadata, created_by_agent)
             VALUES (
                 '{artifact_id}',
-                {self._escape(plan_id) if plan_id else 'NULL'},
-                {self._escape(phase_id) if phase_id else 'NULL'},
+                {self._escape(plan_id) if plan_id else "NULL"},
+                {self._escape(phase_id) if phase_id else "NULL"},
                 '{artifact_type.value}',
                 {self._escape(artifact_name)},
                 {self._escape(artifact_reference)},
@@ -341,13 +352,15 @@ class StateManager:
         self._execute(sql)
         return artifact_id
 
-    def get_artifacts_by_type(self, artifact_type: ArtifactType, plan_id: Optional[str] = None) -> List[Dict]:
+    def get_artifacts_by_type(
+        self, artifact_type: ArtifactType, plan_id: str | None = None
+    ) -> list[dict]:
         where_clause = f"artifact_type = '{artifact_type.value}' AND status = 'active'"
         if plan_id:
             where_clause += f" AND plan_id = '{plan_id}'"
-        
+
         sql = f"""
-            SELECT * FROM {self._table('AGENT_ARTIFACTS')}
+            SELECT * FROM {self._table("AGENT_ARTIFACTS")}
             WHERE {where_clause}
             ORDER BY created_at DESC
         """
@@ -360,35 +373,39 @@ class StateManager:
         prompt_text: str,
         response_text: str,
         latency_ms: int,
-        plan_id: Optional[str] = None,
-        phase_id: Optional[str] = None,
-        execution_id: Optional[str] = None,
-        prompt_tokens: Optional[int] = None,
-        response_tokens: Optional[int] = None,
+        plan_id: str | None = None,
+        phase_id: str | None = None,
+        execution_id: str | None = None,
+        prompt_tokens: int | None = None,
+        response_tokens: int | None = None,
         status: str = "success",
-        error_message: Optional[str] = None,
-        metadata: Optional[Dict] = None,
+        error_message: str | None = None,
+        metadata: dict | None = None,
     ) -> str:
         log_id = str(uuid4())
-        total_tokens = (prompt_tokens or 0) + (response_tokens or 0) if prompt_tokens or response_tokens else None
-        
+        total_tokens = (
+            (prompt_tokens or 0) + (response_tokens or 0)
+            if prompt_tokens or response_tokens
+            else None
+        )
+
         sql = f"""
-            INSERT INTO {self._table('CORTEX_CALL_LOGS')}
-            (log_id, plan_id, phase_id, execution_id, call_type, model_name, 
+            INSERT INTO {self._table("CORTEX_CALL_LOGS")}
+            (log_id, plan_id, phase_id, execution_id, call_type, model_name,
              prompt_text, prompt_tokens, response_text, response_tokens, total_tokens,
              latency_ms, status, error_message, metadata)
             VALUES (
                 '{log_id}',
-                {self._escape(plan_id) if plan_id else 'NULL'},
-                {self._escape(phase_id) if phase_id else 'NULL'},
-                {self._escape(execution_id) if execution_id else 'NULL'},
+                {self._escape(plan_id) if plan_id else "NULL"},
+                {self._escape(phase_id) if phase_id else "NULL"},
+                {self._escape(execution_id) if execution_id else "NULL"},
                 {self._escape(call_type)},
                 {self._escape(model_name)},
                 {self._escape(prompt_text[:10000] if prompt_text else None)},
-                {prompt_tokens or 'NULL'},
+                {prompt_tokens or "NULL"},
                 {self._escape(response_text[:10000] if response_text else None)},
-                {response_tokens or 'NULL'},
-                {total_tokens or 'NULL'},
+                {response_tokens or "NULL"},
+                {total_tokens or "NULL"},
                 {latency_ms},
                 {self._escape(status)},
                 {self._escape(error_message)},

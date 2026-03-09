@@ -2,7 +2,7 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -10,12 +10,12 @@ class FeatureDefinition:
     name: str
     expression: str
     data_type: str
-    description: Optional[str] = None
+    description: str | None = None
     category: str = "numeric"
     is_derived: bool = False
-    source_columns: List[str] = field(default_factory=list)
+    source_columns: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "expression": self.expression,
@@ -32,7 +32,7 @@ class FeatureStore:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         database: str = "AGENTIC_PLATFORM",
         schema: str = "ML",
     ):
@@ -50,14 +50,16 @@ class FeatureStore:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
-    def _execute(self, sql: str) -> List[Dict]:
-        if hasattr(self.session, 'sql'):
+    def _execute(self, sql: str) -> list[dict]:
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -71,13 +73,13 @@ class FeatureStore:
             finally:
                 cursor.close()
 
-    def discover_features(self, table_name: str) -> List[FeatureDefinition]:
-        parts = table_name.split('.')
+    def discover_features(self, table_name: str) -> list[FeatureDefinition]:
+        parts = table_name.split(".")
         table = parts[-1]
 
         sql = f"""
             SELECT COLUMN_NAME, DATA_TYPE
-            FROM {'.'.join(parts[:-1]) if len(parts) > 1 else parts[0]}.INFORMATION_SCHEMA.COLUMNS
+            FROM {".".join(parts[:-1]) if len(parts) > 1 else parts[0]}.INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_NAME = '{table}'
         """
 
@@ -88,23 +90,27 @@ class FeatureStore:
                 col_name = r.get("COLUMN_NAME")
                 data_type = r.get("DATA_TYPE", "")
 
-                if any(t in data_type.upper() for t in ['NUMBER', 'FLOAT', 'INT', 'DOUBLE', 'DECIMAL']):
+                if any(
+                    t in data_type.upper() for t in ["NUMBER", "FLOAT", "INT", "DOUBLE", "DECIMAL"]
+                ):
                     category = "numeric"
-                elif any(t in data_type.upper() for t in ['VARCHAR', 'STRING', 'TEXT']):
+                elif any(t in data_type.upper() for t in ["VARCHAR", "STRING", "TEXT"]):
                     category = "categorical"
-                elif any(t in data_type.upper() for t in ['DATE', 'TIME', 'TIMESTAMP']):
+                elif any(t in data_type.upper() for t in ["DATE", "TIME", "TIMESTAMP"]):
                     category = "temporal"
-                elif 'BOOLEAN' in data_type.upper():
+                elif "BOOLEAN" in data_type.upper():
                     category = "boolean"
                 else:
                     category = "other"
 
-                features.append(FeatureDefinition(
-                    name=col_name,
-                    expression=f'"{col_name}"',
-                    data_type=data_type,
-                    category=category,
-                ))
+                features.append(
+                    FeatureDefinition(
+                        name=col_name,
+                        expression=f'"{col_name}"',
+                        data_type=data_type,
+                        category=category,
+                    )
+                )
         except Exception:
             pass
 
@@ -116,59 +122,61 @@ class FeatureStore:
         value_column: str,
         partition_column: str,
         order_column: str,
-        windows: List[int] = None,
-    ) -> List[FeatureDefinition]:
+        windows: list[int] = None,
+    ) -> list[FeatureDefinition]:
         windows = windows or [7, 14, 30, 60]
         features = []
 
         for window in windows:
-            features.extend([
-                FeatureDefinition(
-                    name=f"{value_column}_ROLLING_AVG_{window}",
-                    expression=f'AVG("{value_column}") OVER (PARTITION BY "{partition_column}" ORDER BY "{order_column}" ROWS BETWEEN {window} PRECEDING AND CURRENT ROW)',
-                    data_type="FLOAT",
-                    description=f"{window}-period rolling average of {value_column}",
-                    category="numeric",
-                    is_derived=True,
-                    source_columns=[value_column],
-                ),
-                FeatureDefinition(
-                    name=f"{value_column}_ROLLING_SUM_{window}",
-                    expression=f'SUM("{value_column}") OVER (PARTITION BY "{partition_column}" ORDER BY "{order_column}" ROWS BETWEEN {window} PRECEDING AND CURRENT ROW)',
-                    data_type="FLOAT",
-                    description=f"{window}-period rolling sum of {value_column}",
-                    category="numeric",
-                    is_derived=True,
-                    source_columns=[value_column],
-                ),
-                FeatureDefinition(
-                    name=f"{value_column}_ROLLING_MIN_{window}",
-                    expression=f'MIN("{value_column}") OVER (PARTITION BY "{partition_column}" ORDER BY "{order_column}" ROWS BETWEEN {window} PRECEDING AND CURRENT ROW)',
-                    data_type="FLOAT",
-                    description=f"{window}-period rolling minimum of {value_column}",
-                    category="numeric",
-                    is_derived=True,
-                    source_columns=[value_column],
-                ),
-                FeatureDefinition(
-                    name=f"{value_column}_ROLLING_MAX_{window}",
-                    expression=f'MAX("{value_column}") OVER (PARTITION BY "{partition_column}" ORDER BY "{order_column}" ROWS BETWEEN {window} PRECEDING AND CURRENT ROW)',
-                    data_type="FLOAT",
-                    description=f"{window}-period rolling maximum of {value_column}",
-                    category="numeric",
-                    is_derived=True,
-                    source_columns=[value_column],
-                ),
-                FeatureDefinition(
-                    name=f"{value_column}_ROLLING_STDDEV_{window}",
-                    expression=f'STDDEV("{value_column}") OVER (PARTITION BY "{partition_column}" ORDER BY "{order_column}" ROWS BETWEEN {window} PRECEDING AND CURRENT ROW)',
-                    data_type="FLOAT",
-                    description=f"{window}-period rolling standard deviation of {value_column}",
-                    category="numeric",
-                    is_derived=True,
-                    source_columns=[value_column],
-                ),
-            ])
+            features.extend(
+                [
+                    FeatureDefinition(
+                        name=f"{value_column}_ROLLING_AVG_{window}",
+                        expression=f'AVG("{value_column}") OVER (PARTITION BY "{partition_column}" ORDER BY "{order_column}" ROWS BETWEEN {window} PRECEDING AND CURRENT ROW)',
+                        data_type="FLOAT",
+                        description=f"{window}-period rolling average of {value_column}",
+                        category="numeric",
+                        is_derived=True,
+                        source_columns=[value_column],
+                    ),
+                    FeatureDefinition(
+                        name=f"{value_column}_ROLLING_SUM_{window}",
+                        expression=f'SUM("{value_column}") OVER (PARTITION BY "{partition_column}" ORDER BY "{order_column}" ROWS BETWEEN {window} PRECEDING AND CURRENT ROW)',
+                        data_type="FLOAT",
+                        description=f"{window}-period rolling sum of {value_column}",
+                        category="numeric",
+                        is_derived=True,
+                        source_columns=[value_column],
+                    ),
+                    FeatureDefinition(
+                        name=f"{value_column}_ROLLING_MIN_{window}",
+                        expression=f'MIN("{value_column}") OVER (PARTITION BY "{partition_column}" ORDER BY "{order_column}" ROWS BETWEEN {window} PRECEDING AND CURRENT ROW)',
+                        data_type="FLOAT",
+                        description=f"{window}-period rolling minimum of {value_column}",
+                        category="numeric",
+                        is_derived=True,
+                        source_columns=[value_column],
+                    ),
+                    FeatureDefinition(
+                        name=f"{value_column}_ROLLING_MAX_{window}",
+                        expression=f'MAX("{value_column}") OVER (PARTITION BY "{partition_column}" ORDER BY "{order_column}" ROWS BETWEEN {window} PRECEDING AND CURRENT ROW)',
+                        data_type="FLOAT",
+                        description=f"{window}-period rolling maximum of {value_column}",
+                        category="numeric",
+                        is_derived=True,
+                        source_columns=[value_column],
+                    ),
+                    FeatureDefinition(
+                        name=f"{value_column}_ROLLING_STDDEV_{window}",
+                        expression=f'STDDEV("{value_column}") OVER (PARTITION BY "{partition_column}" ORDER BY "{order_column}" ROWS BETWEEN {window} PRECEDING AND CURRENT ROW)',
+                        data_type="FLOAT",
+                        description=f"{window}-period rolling standard deviation of {value_column}",
+                        category="numeric",
+                        is_derived=True,
+                        source_columns=[value_column],
+                    ),
+                ]
+            )
 
         return features
 
@@ -177,38 +185,42 @@ class FeatureStore:
         value_column: str,
         partition_column: str,
         order_column: str,
-        lags: List[int] = None,
-    ) -> List[FeatureDefinition]:
+        lags: list[int] = None,
+    ) -> list[FeatureDefinition]:
         lags = lags or [1, 7, 14, 30]
         features = []
 
         for lag in lags:
-            features.append(FeatureDefinition(
-                name=f"{value_column}_LAG_{lag}",
-                expression=f'LAG("{value_column}", {lag}) OVER (PARTITION BY "{partition_column}" ORDER BY "{order_column}")',
-                data_type="FLOAT",
-                description=f"{value_column} lagged by {lag} periods",
-                category="numeric",
-                is_derived=True,
-                source_columns=[value_column],
-            ))
+            features.append(
+                FeatureDefinition(
+                    name=f"{value_column}_LAG_{lag}",
+                    expression=f'LAG("{value_column}", {lag}) OVER (PARTITION BY "{partition_column}" ORDER BY "{order_column}")',
+                    data_type="FLOAT",
+                    description=f"{value_column} lagged by {lag} periods",
+                    category="numeric",
+                    is_derived=True,
+                    source_columns=[value_column],
+                )
+            )
 
-            features.append(FeatureDefinition(
-                name=f"{value_column}_DIFF_{lag}",
-                expression=f'"{value_column}" - LAG("{value_column}", {lag}) OVER (PARTITION BY "{partition_column}" ORDER BY "{order_column}")',
-                data_type="FLOAT",
-                description=f"Difference from {lag} periods ago",
-                category="numeric",
-                is_derived=True,
-                source_columns=[value_column],
-            ))
+            features.append(
+                FeatureDefinition(
+                    name=f"{value_column}_DIFF_{lag}",
+                    expression=f'"{value_column}" - LAG("{value_column}", {lag}) OVER (PARTITION BY "{partition_column}" ORDER BY "{order_column}")',
+                    data_type="FLOAT",
+                    description=f"Difference from {lag} periods ago",
+                    category="numeric",
+                    is_derived=True,
+                    source_columns=[value_column],
+                )
+            )
 
         return features
 
     def create_temporal_features(
         self,
         timestamp_column: str,
-    ) -> List[FeatureDefinition]:
+    ) -> list[FeatureDefinition]:
         return [
             FeatureDefinition(
                 name=f"{timestamp_column}_YEAR",
@@ -263,14 +275,14 @@ class FeatureStore:
     def materialize_feature_table(
         self,
         source_table: str,
-        features: List[FeatureDefinition],
+        features: list[FeatureDefinition],
         output_table: str,
         include_source_columns: bool = True,
     ) -> str:
         source_cols = "*" if include_source_columns else ""
-        
+
         feature_exprs = [f'{f.expression} AS "{f.name}"' for f in features if f.is_derived]
-        
+
         select_parts = []
         if source_cols:
             select_parts.append(source_cols)
@@ -278,7 +290,7 @@ class FeatureStore:
 
         sql = f"""
             CREATE OR REPLACE TABLE {output_table} AS
-            SELECT {', '.join(select_parts)}
+            SELECT {", ".join(select_parts)}
             FROM {source_table}
         """
 
@@ -288,12 +300,12 @@ class FeatureStore:
         except Exception as e:
             raise RuntimeError(f"Failed to materialize feature table: {e}")
 
-    def get_feature_stats(self, table_name: str, features: List[str]) -> Dict[str, Any]:
+    def get_feature_stats(self, table_name: str, features: list[str]) -> dict[str, Any]:
         stats = {}
-        
+
         for feature in features[:20]:
             sql = f"""
-                SELECT 
+                SELECT
                     AVG("{feature}") as mean_val,
                     STDDEV("{feature}") as std_val,
                     MIN("{feature}") as min_val,

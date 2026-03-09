@@ -9,8 +9,7 @@ Cortex Agents orchestrate tools including:
 
 import json
 import os
-from typing import Any, Dict, List, Optional
-
+from typing import Any
 
 AGENT_SYSTEM_PROMPT_TEMPLATE = """You are an AI assistant for {domain}.
 
@@ -33,7 +32,7 @@ class CortexAgentBuilder:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         database: str = "AGENTIC_PLATFORM",
         schema: str = "CORTEX",
         warehouse: str = "COMPUTE_WH",
@@ -53,13 +52,15 @@ class CortexAgentBuilder:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             return snowflake.connector.connect(connection_name=self.connection_name)
 
-    def _execute(self, sql: str) -> List[Dict]:
-        if hasattr(self.session, 'sql'):
+    def _execute(self, sql: str) -> list[dict]:
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -77,39 +78,45 @@ class CortexAgentBuilder:
         self,
         agent_name: str,
         domain: str,
-        search_services: Optional[List[str]] = None,
-        semantic_models: Optional[List[str]] = None,
-        ml_functions: Optional[List[str]] = None,
+        search_services: list[str] | None = None,
+        semantic_models: list[str] | None = None,
+        ml_functions: list[str] | None = None,
         model: str = "claude-3-5-sonnet",
         additional_instructions: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a Cortex Agent with configured tools."""
-        
+
         tools = []
         capabilities = []
 
         if search_services:
             for service in search_services:
-                tools.append({
-                    "type": "cortex_search",
-                    "service": service,
-                })
+                tools.append(
+                    {
+                        "type": "cortex_search",
+                        "service": service,
+                    }
+                )
                 capabilities.append(f"- Search documents using {service}")
 
         if semantic_models:
             for model_ref in semantic_models:
-                tools.append({
-                    "type": "cortex_analyst",
-                    "semantic_model": model_ref,
-                })
+                tools.append(
+                    {
+                        "type": "cortex_analyst",
+                        "semantic_model": model_ref,
+                    }
+                )
                 capabilities.append(f"- Query data using {model_ref}")
 
         if ml_functions:
             for func in ml_functions:
-                tools.append({
-                    "type": "function",
-                    "function": func,
-                })
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": func,
+                    }
+                )
                 capabilities.append(f"- Make predictions using {func}")
 
         system_prompt = AGENT_SYSTEM_PROMPT_TEMPLATE.format(
@@ -127,7 +134,7 @@ class CortexAgentBuilder:
         }
 
         full_name = f"{self.database}.{self.schema}.{agent_name}"
-        
+
         return {
             "agent_name": full_name,
             "config": agent_config,
@@ -137,19 +144,19 @@ class CortexAgentBuilder:
     def create_agent_sql(
         self,
         agent_name: str,
-        search_service: Optional[str] = None,
-        semantic_model_stage: Optional[str] = None,
+        search_service: str | None = None,
+        semantic_model_stage: str | None = None,
     ) -> str:
         """Generate SQL to create a Cortex Agent (when GA)."""
-        
+
         tools_sql = []
-        
+
         if search_service:
             tools_sql.append(f"""
                 TOOL cortex_search_{agent_name}
                 TYPE = cortex_search
                 SERVICE = {search_service}""")
-        
+
         if semantic_model_stage:
             tools_sql.append(f"""
                 TOOL cortex_analyst_{agent_name}
@@ -170,12 +177,12 @@ CREATE OR REPLACE CORTEX AGENT {self.database}.{self.schema}.{agent_name}
 
     def invoke_agent(
         self,
-        agent_config: Dict[str, Any],
+        agent_config: dict[str, Any],
         message: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
-    ) -> Dict[str, Any]:
+        conversation_history: list[dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
         """Invoke a Cortex Agent with a message.
-        
+
         Since Cortex Agent is in preview, this uses Cortex Complete with
         tool simulation.
         """
@@ -198,10 +205,14 @@ CREATE OR REPLACE CORTEX AGENT {self.database}.{self.schema}.{agent_name}
             tool_type = tool.get("type", "")
             if tool_type == "cortex_search":
                 service = tool.get("service", "")
-                tool_descriptions.append(f"- cortex_search({service}): Search documents for relevant information")
+                tool_descriptions.append(
+                    f"- cortex_search({service}): Search documents for relevant information"
+                )
             elif tool_type == "cortex_analyst":
                 semantic_model = tool.get("semantic_model", "")
-                tool_descriptions.append(f"- cortex_analyst({semantic_model}): Query structured data using natural language")
+                tool_descriptions.append(
+                    f"- cortex_analyst({semantic_model}): Query structured data using natural language"
+                )
             elif tool_type == "function":
                 func = tool.get("function", "")
                 tool_descriptions.append(f"- {func}(): Call ML function for predictions")
@@ -209,7 +220,7 @@ CREATE OR REPLACE CORTEX AGENT {self.database}.{self.schema}.{agent_name}
         full_prompt = f"""{system_prompt}
 
 Available tools:
-{chr(10).join(tool_descriptions) if tool_descriptions else 'No tools configured'}
+{chr(10).join(tool_descriptions) if tool_descriptions else "No tools configured"}
 
 Conversation:
 {messages_text}
@@ -243,12 +254,12 @@ Respond helpfully. If you need to use a tool, indicate which tool and why."""
     def create_agent_service_function(
         self,
         agent_name: str,
-        agent_config: Dict[str, Any],
+        agent_config: dict[str, Any],
     ) -> str:
         """Create a UDF that wraps the agent for easy invocation."""
-        
+
         config_json = json.dumps(agent_config).replace("'", "''")
-        
+
         sql = f"""
 CREATE OR REPLACE FUNCTION {self.database}.{self.schema}.INVOKE_{agent_name}(message VARCHAR)
 RETURNS VARIANT
@@ -263,15 +274,15 @@ import _snowflake
 
 def invoke_agent(message: str) -> dict:
     config = json.loads('''{config_json}''')
-    
+
     system_prompt = config.get("system_prompt", "You are a helpful assistant.")
     model = "mistral-large2"
-    
+
     full_prompt = f"{{system_prompt}}\\n\\nUSER: {{message}}"
-    
+
     session = _snowflake.session()
-    result = session.sql(f"SELECT SNOWFLAKE.CORTEX.COMPLETE('{model}', $${full_prompt}$$) as RESPONSE").collect()
-    
+    result = session.sql(f"SELECT SNOWFLAKE.CORTEX.COMPLETE('{{model}}', $${{full_prompt}}$$) as RESPONSE").collect()  # noqa: F821
+
     if result:
         return {{"response": result[0]["RESPONSE"], "status": "success"}}
     return {{"response": "", "status": "empty"}}
@@ -283,19 +294,19 @@ $$;
 def create_app_agent(
     agent_name: str,
     domain: str,
-    search_service: Optional[str] = None,
-    semantic_model: Optional[str] = None,
-    ml_function: Optional[str] = None,
+    search_service: str | None = None,
+    semantic_model: str | None = None,
+    ml_function: str | None = None,
     database: str = "AGENTIC_PLATFORM",
     schema: str = "CORTEX",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """High-level function to create an agent for a generated app."""
     builder = CortexAgentBuilder(database=database, schema=schema)
-    
+
     search_services = [search_service] if search_service else None
     semantic_models = [semantic_model] if semantic_model else None
     ml_functions = [ml_function] if ml_function else None
-    
+
     return builder.create_agent(
         agent_name=agent_name,
         domain=domain,
@@ -306,10 +317,10 @@ def create_app_agent(
 
 
 def invoke_app_agent(
-    agent_config: Dict[str, Any],
+    agent_config: dict[str, Any],
     message: str,
-    conversation_history: Optional[List[Dict[str, str]]] = None,
-) -> Dict[str, Any]:
+    conversation_history: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
     """Invoke an agent from a generated app."""
     builder = CortexAgentBuilder()
     return builder.invoke_agent(agent_config, message, conversation_history)

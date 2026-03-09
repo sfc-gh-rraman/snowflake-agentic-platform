@@ -1,9 +1,8 @@
 """Semantic Model Generator agent - creates semantic models from table profiles."""
 
-import os
-from typing import Any, Dict, List, Optional
 import json
-
+import os
+from typing import Any
 
 SEMANTIC_GEN_PROMPT = """Generate a semantic model YAML for Cortex Analyst.
 
@@ -48,7 +47,7 @@ class SemanticModelGenerator:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         database: str = "AGENTIC_PLATFORM",
         schema: str = "ANALYTICS",
         model: str = "mistral-large2",
@@ -68,14 +67,16 @@ class SemanticModelGenerator:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
     def _execute(self, sql: str) -> Any:
-        if hasattr(self.session, 'sql'):
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return result[0][0] if result else ""
         else:
@@ -87,8 +88,8 @@ class SemanticModelGenerator:
             finally:
                 cursor.close()
 
-    def _execute_query(self, sql: str) -> List[Dict]:
-        if hasattr(self.session, 'sql'):
+    def _execute_query(self, sql: str) -> list[dict]:
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -105,8 +106,8 @@ class SemanticModelGenerator:
     def _escape(self, text: str) -> str:
         return text.replace("'", "''").replace("\\", "\\\\")
 
-    def _get_table_info(self, table_name: str) -> Dict[str, Any]:
-        parts = table_name.split('.')
+    def _get_table_info(self, table_name: str) -> dict[str, Any]:
+        parts = table_name.split(".")
         if len(parts) >= 3:
             db, schema, table = parts[0], parts[1], parts[-1]
         elif len(parts) == 2:
@@ -134,8 +135,8 @@ class SemanticModelGenerator:
 
     def _classify_columns(
         self,
-        columns: List[Dict[str, str]],
-    ) -> Dict[str, List[Dict[str, str]]]:
+        columns: list[dict[str, str]],
+    ) -> dict[str, list[dict[str, str]]]:
         dimensions = []
         facts = []
 
@@ -144,13 +145,30 @@ class SemanticModelGenerator:
             data_type = col.get("DATA_TYPE", "")
             col_lower = col_name.lower()
 
-            is_date = any(t in data_type.upper() for t in ['DATE', 'TIME', 'TIMESTAMP'])
-            is_string = any(t in data_type.upper() for t in ['VARCHAR', 'STRING', 'TEXT'])
-            is_numeric = any(t in data_type.upper() for t in ['NUMBER', 'FLOAT', 'INT', 'DOUBLE', 'DECIMAL'])
+            is_date = any(t in data_type.upper() for t in ["DATE", "TIME", "TIMESTAMP"])
+            is_string = any(t in data_type.upper() for t in ["VARCHAR", "STRING", "TEXT"])
+            is_numeric = any(
+                t in data_type.upper() for t in ["NUMBER", "FLOAT", "INT", "DOUBLE", "DECIMAL"]
+            )
 
-            is_id = any(kw in col_lower for kw in ['_id', 'id_', 'key', 'code'])
-            is_category = any(kw in col_lower for kw in ['type', 'status', 'category', 'class', 'name', 'region'])
-            is_measure = any(kw in col_lower for kw in ['amount', 'count', 'total', 'sum', 'avg', 'price', 'cost', 'value', 'quantity'])
+            is_id = any(kw in col_lower for kw in ["_id", "id_", "key", "code"])
+            is_category = any(
+                kw in col_lower for kw in ["type", "status", "category", "class", "name", "region"]
+            )
+            is_measure = any(
+                kw in col_lower
+                for kw in [
+                    "amount",
+                    "count",
+                    "total",
+                    "sum",
+                    "avg",
+                    "price",
+                    "cost",
+                    "value",
+                    "quantity",
+                ]
+            )
 
             if is_date or is_id or is_category or (is_string and not is_measure):
                 dimensions.append(col)
@@ -193,55 +211,68 @@ class SemanticModelGenerator:
 
             try:
                 response = self._execute(sql)
-                yaml_start = response.find('```yaml')
-                yaml_end = response.rfind('```')
+                yaml_start = response.find("```yaml")
+                yaml_end = response.rfind("```")
                 if yaml_start >= 0 and yaml_end > yaml_start:
-                    return response[yaml_start + 7:yaml_end].strip()
-                elif 'name:' in response:
+                    return response[yaml_start + 7 : yaml_end].strip()
+                elif "name:" in response:
                     return response.strip()
             except Exception:
                 pass
 
-        yaml_parts = [f"name: {model_name}", "tables:", f"  - name: {table_name.split('.')[-1]}", f"    base_table: {table_name}"]
+        yaml_parts = [
+            f"name: {model_name}",
+            "tables:",
+            f"  - name: {table_name.split('.')[-1]}",
+            f"    base_table: {table_name}",
+        ]
 
         if classified["dimensions"]:
             yaml_parts.append("    dimensions:")
             for dim in classified["dimensions"][:10]:
                 col_name = dim.get("COLUMN_NAME")
                 data_type = dim.get("DATA_TYPE")
-                yaml_parts.extend([
-                    f"      - name: {col_name}",
-                    f'        expr: "{col_name}"',
-                    f"        data_type: {data_type}",
-                    f"        description: {col_name} dimension",
-                ])
+                yaml_parts.extend(
+                    [
+                        f"      - name: {col_name}",
+                        f'        expr: "{col_name}"',
+                        f"        data_type: {data_type}",
+                        f"        description: {col_name} dimension",
+                    ]
+                )
 
         if classified["facts"]:
             yaml_parts.append("    facts:")
             for fact in classified["facts"][:10]:
                 col_name = fact.get("COLUMN_NAME")
                 data_type = fact.get("DATA_TYPE")
-                yaml_parts.extend([
-                    f"      - name: {col_name}",
-                    f'        expr: "{col_name}"',
-                    f"        data_type: {data_type}",
-                    f"        description: {col_name} measure",
-                ])
+                yaml_parts.extend(
+                    [
+                        f"      - name: {col_name}",
+                        f'        expr: "{col_name}"',
+                        f"        data_type: {data_type}",
+                        f"        description: {col_name} measure",
+                    ]
+                )
 
         yaml_parts.append("verified_queries:")
-        yaml_parts.extend([
-            "  - name: total_count",
-            '    question: "How many total records are there?"',
-            f'    sql: "SELECT COUNT(*) FROM {table_name}"',
-        ])
+        yaml_parts.extend(
+            [
+                "  - name: total_count",
+                '    question: "How many total records are there?"',
+                f'    sql: "SELECT COUNT(*) FROM {table_name}"',
+            ]
+        )
 
         if classified["facts"]:
             first_fact = classified["facts"][0].get("COLUMN_NAME")
-            yaml_parts.extend([
-                "  - name: sum_measure",
-                f'    question: "What is the total {first_fact}?"',
-                f'    sql: "SELECT SUM({first_fact}) FROM {table_name}"',
-            ])
+            yaml_parts.extend(
+                [
+                    "  - name: sum_measure",
+                    f'    question: "What is the total {first_fact}?"',
+                    f'    sql: "SELECT SUM({first_fact}) FROM {table_name}"',
+                ]
+            )
 
         return "\n".join(yaml_parts)
 
@@ -249,7 +280,7 @@ class SemanticModelGenerator:
         self,
         view_name: str,
         yaml_content: str,
-        stage_path: Optional[str] = None,
+        stage_path: str | None = None,
     ) -> str:
         if stage_path:
             full_stage = f"@{self.database}.{self.schema}.{stage_path}"
@@ -260,7 +291,7 @@ class SemanticModelGenerator:
             """)
             full_stage = f"@{self.database}.{self.schema}.{stage_name}"
 
-        yaml_escaped = yaml_content.replace("'", "''")
+        yaml_content.replace("'", "''")
 
         return {
             "view_name": view_name,
@@ -270,7 +301,7 @@ class SemanticModelGenerator:
         }
 
 
-def generate_semantic_model(state: Dict[str, Any]) -> Dict[str, Any]:
+def generate_semantic_model(state: dict[str, Any]) -> dict[str, Any]:
     """LangGraph node function for semantic model generation."""
     generator = SemanticModelGenerator()
 
@@ -298,10 +329,13 @@ def generate_semantic_model(state: Dict[str, Any]) -> Dict[str, Any]:
             },
             "semantic_yaml": yaml_content,
             "current_state": "COMPLETE",
-            "messages": state.get("messages", []) + [{
-                "role": "system",
-                "content": f"Generated semantic model: {model_name}",
-            }],
+            "messages": state.get("messages", [])
+            + [
+                {
+                    "role": "system",
+                    "content": f"Generated semantic model: {model_name}",
+                }
+            ],
         }
     except Exception as e:
         return {

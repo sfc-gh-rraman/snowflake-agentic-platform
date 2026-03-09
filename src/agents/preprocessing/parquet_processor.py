@@ -2,11 +2,11 @@
 
 import os
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 
-class ParquetProcessorState(str, Enum):
+class ParquetProcessorState(StrEnum):
     SCAN = "SCAN"
     SCHEMA_INFER = "SCHEMA_INFER"
     PROFILE = "PROFILE"
@@ -22,9 +22,9 @@ class ParquetFile:
     path: str
     name: str
     size_bytes: int
-    schema: Optional[Dict[str, str]] = None
-    row_count: Optional[int] = None
-    quality_issues: List[str] = field(default_factory=list)
+    schema: dict[str, str] | None = None
+    row_count: int | None = None
+    quality_issues: list[str] = field(default_factory=list)
 
 
 class ParquetProcessor:
@@ -32,7 +32,7 @@ class ParquetProcessor:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         database: str = "AGENTIC_PLATFORM",
         target_schema: str = "RAW",
     ):
@@ -50,14 +50,16 @@ class ParquetProcessor:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
-    def _execute(self, sql: str) -> List[Dict]:
-        if hasattr(self.session, 'sql'):
+    def _execute(self, sql: str) -> list[dict]:
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -71,8 +73,8 @@ class ParquetProcessor:
             finally:
                 cursor.close()
 
-    def scan(self, stage_path: str) -> List[ParquetFile]:
-        if not stage_path.startswith('@'):
+    def scan(self, stage_path: str) -> list[ParquetFile]:
+        if not stage_path.startswith("@"):
             stage_path = f"@{stage_path}"
 
         sql = f"LIST {stage_path} PATTERN='.*\\.parquet'"
@@ -85,16 +87,18 @@ class ParquetProcessor:
         for row in results:
             name = row.get("name", "")
             if name:
-                files.append(ParquetFile(
-                    path=f"{stage_path}/{name}",
-                    name=name.split('/')[-1],
-                    size_bytes=row.get("size", 0),
-                ))
+                files.append(
+                    ParquetFile(
+                        path=f"{stage_path}/{name}",
+                        name=name.split("/")[-1],
+                        size_bytes=row.get("size", 0),
+                    )
+                )
 
         return files
 
     def infer_schema(self, parquet_file: ParquetFile) -> ParquetFile:
-        if not hasattr(self.session, 'read'):
+        if not hasattr(self.session, "read"):
             parquet_file.schema = {"error": "Snowpark session required"}
             return parquet_file
 
@@ -110,7 +114,7 @@ class ParquetProcessor:
 
         return parquet_file
 
-    def profile(self, parquet_file: ParquetFile) -> Dict[str, Any]:
+    def profile(self, parquet_file: ParquetFile) -> dict[str, Any]:
         if not parquet_file.schema:
             return {"error": "No schema available"}
 
@@ -124,7 +128,7 @@ class ParquetProcessor:
 
         return profile
 
-    def quality_check(self, parquet_file: ParquetFile) -> List[str]:
+    def quality_check(self, parquet_file: ParquetFile) -> list[str]:
         issues = list(parquet_file.quality_issues)
 
         if not parquet_file.schema:
@@ -135,21 +139,21 @@ class ParquetProcessor:
             issues.append("File contains no rows")
 
         for col_name, col_type in parquet_file.schema.items():
-            if col_name.startswith('_'):
+            if col_name.startswith("_"):
                 issues.append(f"Column '{col_name}' has underscore prefix")
-            if ' ' in col_name:
+            if " " in col_name:
                 issues.append(f"Column '{col_name}' contains spaces")
 
         return issues
 
-    def transform(self, parquet_file: ParquetFile) -> Dict[str, str]:
+    def transform(self, parquet_file: ParquetFile) -> dict[str, str]:
         if not parquet_file.schema:
             return {}
 
         column_mapping = {}
         for col_name in parquet_file.schema.keys():
-            new_name = col_name.upper().replace(' ', '_').replace('-', '_')
-            if new_name.startswith('_'):
+            new_name = col_name.upper().replace(" ", "_").replace("-", "_")
+            if new_name.startswith("_"):
                 new_name = new_name[1:]
             column_mapping[col_name] = new_name
 
@@ -158,15 +162,15 @@ class ParquetProcessor:
     def load(
         self,
         parquet_file: ParquetFile,
-        column_mapping: Optional[Dict[str, str]] = None,
-        table_name: Optional[str] = None,
+        column_mapping: dict[str, str] | None = None,
+        table_name: str | None = None,
     ) -> str:
-        if not hasattr(self.session, 'read'):
+        if not hasattr(self.session, "read"):
             raise RuntimeError("Snowpark session required for loading")
 
         if not table_name:
-            base_name = parquet_file.name.replace('.parquet', '').upper()
-            base_name = ''.join(c if c.isalnum() or c == '_' else '_' for c in base_name)
+            base_name = parquet_file.name.replace(".parquet", "").upper()
+            base_name = "".join(c if c.isalnum() or c == "_" else "_" for c in base_name)
             table_name = f"{self.database}.{self.target_schema}.{base_name}"
 
         df = self.session.read.parquet(parquet_file.path)
@@ -180,7 +184,7 @@ class ParquetProcessor:
 
         return table_name
 
-    def process(self, stage_path: str) -> Dict[str, Any]:
+    def process(self, stage_path: str) -> dict[str, Any]:
         result = {
             "stage_path": stage_path,
             "files_processed": 0,
@@ -189,45 +193,49 @@ class ParquetProcessor:
         }
 
         files = self.scan(stage_path)
-        
+
         for pf in files:
             try:
                 pf = self.infer_schema(pf)
-                
+
                 issues = self.quality_check(pf)
                 if issues:
                     pf.quality_issues.extend(issues)
 
                 column_mapping = self.transform(pf)
-                
+
                 table_name = self.load(pf, column_mapping)
-                
-                result["tables_created"].append({
-                    "source": pf.name,
-                    "table": table_name,
-                    "rows": pf.row_count,
-                    "columns": len(pf.schema) if pf.schema else 0,
-                    "issues": pf.quality_issues,
-                })
+
+                result["tables_created"].append(
+                    {
+                        "source": pf.name,
+                        "table": table_name,
+                        "rows": pf.row_count,
+                        "columns": len(pf.schema) if pf.schema else 0,
+                        "issues": pf.quality_issues,
+                    }
+                )
                 result["files_processed"] += 1
 
             except Exception as e:
-                result["errors"].append({
-                    "file": pf.name,
-                    "error": str(e),
-                })
+                result["errors"].append(
+                    {
+                        "file": pf.name,
+                        "error": str(e),
+                    }
+                )
 
         return result
 
 
-def process_parquet(state: Dict[str, Any]) -> Dict[str, Any]:
+def process_parquet(state: dict[str, Any]) -> dict[str, Any]:
     """LangGraph node function for parquet processing."""
     processor = ParquetProcessor(
         target_schema=state.get("target_schema", "RAW"),
     )
 
     stage_paths = state.get("stage_paths", ["@RAW.DATA_STAGE"])
-    
+
     all_results = {
         "files_processed": 0,
         "tables_created": [],
@@ -244,8 +252,11 @@ def process_parquet(state: Dict[str, Any]) -> Dict[str, Any]:
         "parquet_results": all_results,
         "current_state": ParquetProcessorState.COMPLETE.value,
         "tables_created": [t["table"] for t in all_results["tables_created"]],
-        "messages": state.get("messages", []) + [{
-            "role": "system",
-            "content": f"Processed {all_results['files_processed']} parquet files, created {len(all_results['tables_created'])} tables",
-        }],
+        "messages": state.get("messages", [])
+        + [
+            {
+                "role": "system",
+                "content": f"Processed {all_results['files_processed']} parquet files, created {len(all_results['tables_created'])} tables",
+            }
+        ],
     }

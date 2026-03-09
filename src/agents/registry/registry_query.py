@@ -2,8 +2,6 @@
 
 import json
 import os
-from typing import Any, Dict, List, Optional
-from uuid import uuid4
 
 from .models import AgentDefinition, AgentSearchResult
 
@@ -13,7 +11,7 @@ class AgentRegistryQuery:
 
     def __init__(
         self,
-        connection_name: Optional[str] = None,
+        connection_name: str | None = None,
         database: str = "AGENTIC_PLATFORM",
         schema: str = "REGISTRY",
         search_service: str = "AGENT_CAPABILITY_SEARCH",
@@ -33,14 +31,16 @@ class AgentRegistryQuery:
     def _create_session(self):
         if os.path.exists("/snowflake/session/token"):
             from snowflake.snowpark import Session
+
             return Session.builder.getOrCreate()
         else:
             import snowflake.connector
+
             conn = snowflake.connector.connect(connection_name=self.connection_name)
             return conn
 
-    def _execute(self, sql: str) -> List[Dict]:
-        if hasattr(self.session, 'sql'):
+    def _execute(self, sql: str) -> list[dict]:
+        if hasattr(self.session, "sql"):
             result = self.session.sql(sql).collect()
             return [dict(row.asDict()) for row in result]
         else:
@@ -62,13 +62,13 @@ class AgentRegistryQuery:
     def search_agents(
         self,
         query: str,
-        input_type: Optional[str] = None,
-        output_type: Optional[str] = None,
-        category: Optional[str] = None,
+        input_type: str | None = None,
+        output_type: str | None = None,
+        category: str | None = None,
         limit: int = 10,
-    ) -> List[AgentSearchResult]:
+    ) -> list[AgentSearchResult]:
         service = f"{self.database}.{self.schema}.{self.search_service}"
-        
+
         filter_parts = []
         if input_type:
             filter_parts.append(f'"input_types": "{self._escape(input_type)}"')
@@ -81,7 +81,14 @@ class AgentRegistryQuery:
 
         search_query = {
             "query": self._escape(query),
-            "columns": ["chunk_text", "agent_name", "capability_name", "input_types", "output_types", "full_definition"],
+            "columns": [
+                "chunk_text",
+                "agent_name",
+                "capability_name",
+                "input_types",
+                "output_types",
+                "full_definition",
+            ],
             "filter": json.loads(filter_json) if filter_json != "{}" else {},
             "limit": limit,
         }
@@ -105,19 +112,21 @@ class AgentRegistryQuery:
 
         search_results = []
         for item in result_data.get("results", []):
-            search_results.append(AgentSearchResult(
-                agent_id=item.get("agent_id", ""),
-                agent_name=item.get("agent_name", ""),
-                capability_name=item.get("capability_name", ""),
-                score=item.get("score", 0.0),
-                input_types=item.get("input_types", []),
-                output_types=item.get("output_types", []),
-                full_definition=item.get("full_definition", {}),
-            ))
+            search_results.append(
+                AgentSearchResult(
+                    agent_id=item.get("agent_id", ""),
+                    agent_name=item.get("agent_name", ""),
+                    capability_name=item.get("capability_name", ""),
+                    score=item.get("score", 0.0),
+                    input_types=item.get("input_types", []),
+                    output_types=item.get("output_types", []),
+                    full_definition=item.get("full_definition", {}),
+                )
+            )
 
         return search_results
 
-    def get_agent(self, agent_id: str) -> Optional[AgentDefinition]:
+    def get_agent(self, agent_id: str) -> AgentDefinition | None:
         sql = f"""
             SELECT definition
             FROM {self.database}.{self.schema}.AGENT_DEFINITIONS
@@ -133,7 +142,9 @@ class AgentRegistryQuery:
 
         return AgentDefinition.from_dict(definition_data)
 
-    def list_agents(self, category: Optional[str] = None, active_only: bool = True) -> List[AgentDefinition]:
+    def list_agents(
+        self, category: str | None = None, active_only: bool = True
+    ) -> list[AgentDefinition]:
         where_clauses = []
         if active_only:
             where_clauses.append("is_active = TRUE")
@@ -196,12 +207,12 @@ class AgentRegistryQuery:
             Agent: {agent.name}
             Category: {agent.category.value}
             Description: {agent.description}
-            
+
             Capability: {capability.name}
-            {capability.description or ''}
-            
-            Inputs: {', '.join(capability.input_types)}
-            Outputs: {', '.join(capability.output_types)}
+            {capability.description or ""}
+
+            Inputs: {", ".join(capability.input_types)}
+            Outputs: {", ".join(capability.output_types)}
             """
 
             definition_json = json.dumps(agent.to_dict()).replace("'", "''")
@@ -220,8 +231,8 @@ class AgentRegistryQuery:
                     '{self._escape(capability.capability_id)}',
                     '{self._escape(capability.name)}',
                     '{self._escape(chunk_text)}',
-                    ARRAY_CONSTRUCT{input_array.replace('[', '(').replace(']', ')')},
-                    ARRAY_CONSTRUCT{output_array.replace('[', '(').replace(']', ')')},
+                    ARRAY_CONSTRUCT{input_array.replace("[", "(").replace("]", ")")},
+                    ARRAY_CONSTRUCT{output_array.replace("[", "(").replace("]", ")")},
                     50,
                     PARSE_JSON('{definition_json}')
                 )
@@ -231,8 +242,8 @@ class AgentRegistryQuery:
     def find_agents_for_task(
         self,
         task_description: str,
-        input_types: List[str],
-        output_types: List[str],
-    ) -> List[AgentSearchResult]:
+        input_types: list[str],
+        output_types: list[str],
+    ) -> list[AgentSearchResult]:
         query = f"{task_description} input:{' '.join(input_types)} output:{' '.join(output_types)}"
         return self.search_agents(query, limit=5)

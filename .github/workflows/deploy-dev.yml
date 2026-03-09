@@ -1,9 +1,7 @@
 name: Deploy to DEV
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  workflow_dispatch:  # Manual trigger only until secrets are configured
 
 env:
   PYTHON_VERSION: "3.11"

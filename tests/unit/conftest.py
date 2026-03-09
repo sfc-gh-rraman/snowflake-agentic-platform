@@ -1,8 +1,9 @@
 """Pytest fixtures for unit tests."""
 
-import pytest
+from typing import Any
 from unittest.mock import MagicMock, patch
-from typing import Any, Dict, List
+
+import pytest
 
 
 @pytest.fixture
@@ -30,6 +31,7 @@ def mock_snowflake_connector():
 @pytest.fixture
 def mock_cortex_complete():
     """Mock Cortex COMPLETE function responses."""
+
     def _mock_complete(response: str):
         with patch("snowflake.connector.connect") as mock_connect:
             mock_conn = MagicMock()
@@ -38,11 +40,12 @@ def mock_cortex_complete():
             mock_conn.cursor.return_value = mock_cursor
             mock_connect.return_value = mock_conn
             return mock_connect
+
     return _mock_complete
 
 
 @pytest.fixture
-def sample_parquet_state() -> Dict[str, Any]:
+def sample_parquet_state() -> dict[str, Any]:
     """Sample state for Parquet processor tests."""
     return {
         "stage_path": "@RAW.DATA_STAGE/sensors/",
@@ -61,7 +64,7 @@ def sample_parquet_state() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def sample_document_state() -> Dict[str, Any]:
+def sample_document_state() -> dict[str, Any]:
     """Sample state for Document chunker tests."""
     return {
         "stage_path": "@RAW.DOCS_STAGE/reports/",
@@ -80,7 +83,7 @@ def sample_document_state() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def sample_ml_state() -> Dict[str, Any]:
+def sample_ml_state() -> dict[str, Any]:
     """Sample state for ML model builder tests."""
     return {
         "source_table": "CURATED.SENSOR_DATA",
@@ -100,7 +103,7 @@ def sample_ml_state() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def sample_execution_plan() -> Dict[str, Any]:
+def sample_execution_plan() -> dict[str, Any]:
     """Sample execution plan for meta-agent tests."""
     return {
         "use_case": "Equipment Failure Prediction",
@@ -125,7 +128,11 @@ def sample_execution_plan() -> Dict[str, Any]:
                 "phase": "ml_models",
                 "name": "Train ML Models",
                 "steps": [
-                    {"action": "train_model", "model": "anomaly_detector", "task": "anomaly_detection"},
+                    {
+                        "action": "train_model",
+                        "model": "anomaly_detector",
+                        "task": "anomaly_detection",
+                    },
                 ],
             },
             {
@@ -149,7 +156,7 @@ def sample_execution_plan() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def sample_agent_registry_entries() -> List[Dict[str, Any]]:
+def sample_agent_registry_entries() -> list[dict[str, Any]]:
     """Sample agent registry entries for tests."""
     return [
         {
