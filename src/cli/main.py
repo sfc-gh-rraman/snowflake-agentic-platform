@@ -530,5 +530,140 @@ def run_improvement(
         raise typer.Exit(1)
 
 
+@app.command("orchestrator")
+def deploy_orchestrator(
+    database: str = typer.Option("AGENTIC_PLATFORM", "--database", "-db", help="Target database"),
+    schema: str = typer.Option("ORCHESTRATOR", "--schema", "-s", help="Target schema"),
+    compute_pool: str = typer.Option(
+        "AGENTIC_COMPUTE_POOL", "--pool", "-p", help="SPCS compute pool"
+    ),
+    connection: str | None = typer.Option(
+        None, "--connection", "-c", help="Snowflake connection name"
+    ),
+    local: bool = typer.Option(False, "--local", "-l", help="Run locally instead of SPCS"),
+):
+    """Deploy the orchestrator UI to Snowpark Container Services.
+
+    The orchestrator provides a visual workflow UI for monitoring
+    LangGraph execution with Langfuse tracing integration.
+
+    Examples:
+        # Deploy to SPCS (recommended)
+        agentic-platform orchestrator
+
+        # Run locally for development
+        agentic-platform orchestrator --local
+    """
+    conn_name = connection or get_connection_name()
+    os.environ["SNOWFLAKE_CONNECTION_NAME"] = conn_name
+
+    if local:
+        console.print("[bold]Starting Orchestrator Locally[/bold]")
+        console.print("Backend: http://localhost:8000")
+        console.print("Frontend: http://localhost:5173")
+        console.print("\nTo start manually:")
+        console.print("  cd orchestrator/backend && uvicorn server:app --reload")
+        console.print("  cd orchestrator/frontend && npm run dev")
+        return
+
+    console.print(
+        Panel.fit(
+            f"[bold blue]Deploying Orchestrator to SPCS[/bold blue]\n\n"
+            f"Database: {database}\n"
+            f"Schema: {schema}\n"
+            f"Compute Pool: {compute_pool}\n"
+            f"Connection: {conn_name}\n\n"
+            f"[yellow]This will:[/yellow]\n"
+            f"  1. Build Docker image\n"
+            f"  2. Push to Snowflake registry\n"
+            f"  3. Create SPCS service\n\n"
+            f"[cyan]Monitoring: Langfuse Cloud[/cyan]",
+            title="SPCS Deployment",
+        )
+    )
+
+    import subprocess
+    from pathlib import Path
+
+    script_path = Path(__file__).parent.parent.parent / "orchestrator" / "deploy" / "deploy.sh"
+
+    if not script_path.exists():
+        console.print(f"[red]Deploy script not found at {script_path}[/red]")
+        raise typer.Exit(1)
+
+    env = os.environ.copy()
+    env["DATABASE"] = database
+    env["SCHEMA"] = schema
+    env["COMPUTE_POOL"] = compute_pool
+    env["CONNECTION"] = conn_name
+
+    console.print("\n[bold]Running deployment script...[/bold]\n")
+
+    try:
+        result = subprocess.run(
+            ["bash", str(script_path)],
+            env=env,
+            cwd=script_path.parent.parent,
+            check=True,
+        )
+        if result.returncode == 0:
+            console.print("\n[green]✓ Orchestrator deployed successfully![/green]")
+        else:
+            console.print("\n[red]Deployment failed[/red]")
+            raise typer.Exit(1)
+    except subprocess.CalledProcessError as e:
+        console.print(f"\n[red]Deployment failed: {e}[/red]")
+        raise typer.Exit(1)
+    except FileNotFoundError:
+        console.print("[red]bash not found. Please install bash or run deploy.sh manually.[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("ui")
+def start_ui(
+    port: int = typer.Option(8000, "--port", "-p", help="Backend port"),
+    frontend_port: int = typer.Option(5173, "--frontend-port", "-fp", help="Frontend port"),
+):
+    """Start the orchestrator UI locally for development.
+
+    This starts both the FastAPI backend and React frontend in development mode.
+    Use this for local development and testing before deploying to SPCS.
+
+    The UI provides:
+      - Visual workflow DAG showing agent execution
+      - Real-time logs via WebSocket
+      - Langfuse integration for LLM tracing
+    """
+    from pathlib import Path
+
+    backend_dir = Path(__file__).parent.parent.parent / "orchestrator" / "backend"
+    frontend_dir = Path(__file__).parent.parent.parent / "orchestrator" / "frontend"
+
+    if not backend_dir.exists():
+        console.print(f"[red]Backend directory not found: {backend_dir}[/red]")
+        raise typer.Exit(1)
+
+    console.print(
+        Panel.fit(
+            f"[bold blue]Starting Orchestrator UI[/bold blue]\n\n"
+            f"Backend: http://localhost:{port}\n"
+            f"Frontend: http://localhost:{frontend_port}\n"
+            f"API Docs: http://localhost:{port}/docs\n\n"
+            f"[yellow]Press Ctrl+C to stop[/yellow]",
+            title="Local Development",
+        )
+    )
+
+    console.print("\n[bold]Starting backend...[/bold]")
+    console.print(f"  cd {backend_dir}")
+    console.print(f"  uvicorn server:app --port {port} --reload\n")
+
+    console.print("[bold]Starting frontend...[/bold]")
+    console.print(f"  cd {frontend_dir}")
+    console.print(f"  npm run dev -- --port {frontend_port}\n")
+
+    console.print("[yellow]Run these commands in separate terminals.[/yellow]")
+
+
 if __name__ == "__main__":
     app()
