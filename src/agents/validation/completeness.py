@@ -48,10 +48,20 @@ class CompletenessValidator:
         table_name: str,
         required_columns: List[str],
     ) -> Dict[str, Any]:
+        parts = table_name.split('.')
+        if len(parts) == 3:
+            db, schema, table = parts
+        elif len(parts) == 2:
+            db, schema, table = None, parts[0], parts[1]
+        else:
+            db, schema, table = None, None, parts[0]
+        
+        info_schema = f"{db}.INFORMATION_SCHEMA" if db else "INFORMATION_SCHEMA"
         sql = f"""
             SELECT COLUMN_NAME
-            FROM {table_name.rsplit('.', 1)[0]}.INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_NAME = '{table_name.rsplit('.', 1)[-1]}'
+            FROM {info_schema}.COLUMNS
+            WHERE TABLE_NAME = '{table}'
+            {f"AND TABLE_SCHEMA = '{schema}'" if schema else ""}
         """
         try:
             results = self._execute(sql)

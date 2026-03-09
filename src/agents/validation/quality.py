@@ -49,12 +49,19 @@ class QualityValidator:
         max_null_ratio: float = 0.3,
     ) -> Dict[str, Any]:
         parts = table_name.split('.')
-        table = parts[-1]
-
+        if len(parts) == 3:
+            db, schema, table = parts
+        elif len(parts) == 2:
+            db, schema, table = None, parts[0], parts[1]
+        else:
+            db, schema, table = None, None, parts[0]
+        
+        info_schema = f"{db}.INFORMATION_SCHEMA" if db else "INFORMATION_SCHEMA"
         col_sql = f"""
             SELECT COLUMN_NAME
-            FROM {'.'.join(parts[:-1]) if len(parts) > 1 else parts[0]}.INFORMATION_SCHEMA.COLUMNS
+            FROM {info_schema}.COLUMNS
             WHERE TABLE_NAME = '{table}'
+            {f"AND TABLE_SCHEMA = '{schema}'" if schema else ""}
         """
 
         try:
