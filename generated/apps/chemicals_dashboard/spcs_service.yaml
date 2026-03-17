@@ -1,0 +1,21 @@
+{
+  "spec": {
+    "containers": [
+      {
+        "name": "chemical-sales-analytics-dashboard",
+        "image": "/AGENTIC_PLATFORM/ANALYTICS/APP_IMAGES/chemical_sales_analytics_dashboard:latest",
+        "env": {
+          "SNOWFLAKE_ACCOUNT": "{{ context().CURRENT_ACCOUNT }}",
+          "SNOWFLAKE_HOST": "{{ context().CURRENT_HOST }}"
+        }
+      }
+    ],
+    "endpoints": [
+      {
+        "name": "app",
+        "port": 8080,
+        "public": true
+      }
+    ]
+  }
+}

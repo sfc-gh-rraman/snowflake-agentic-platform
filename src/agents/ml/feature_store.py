@@ -220,8 +220,9 @@ class FeatureStore:
     def create_temporal_features(
         self,
         timestamp_column: str,
+        include_time: bool = False,
     ) -> list[FeatureDefinition]:
-        return [
+        features = [
             FeatureDefinition(
                 name=f"{timestamp_column}_YEAR",
                 expression=f'YEAR("{timestamp_column}")',
@@ -255,8 +256,8 @@ class FeatureStore:
                 source_columns=[timestamp_column],
             ),
             FeatureDefinition(
-                name=f"{timestamp_column}_HOUR",
-                expression=f'HOUR("{timestamp_column}")',
+                name=f"{timestamp_column}_QUARTER",
+                expression=f'QUARTER("{timestamp_column}")',
                 data_type="NUMBER",
                 category="temporal",
                 is_derived=True,
@@ -271,6 +272,20 @@ class FeatureStore:
                 source_columns=[timestamp_column],
             ),
         ]
+        
+        if include_time:
+            features.append(
+                FeatureDefinition(
+                    name=f"{timestamp_column}_HOUR",
+                    expression=f'HOUR("{timestamp_column}")',
+                    data_type="NUMBER",
+                    category="temporal",
+                    is_derived=True,
+                    source_columns=[timestamp_column],
+                )
+            )
+        
+        return features
 
     def materialize_feature_table(
         self,

@@ -1,0 +1,114 @@
+name: SALES_ANALYTICS_MODEL
+tables:
+  - name: ERP_SALES_ORDERS
+    base_table: AGENTIC_PLATFORM.RAW.ERP_SALES_ORDERS
+    dimensions:
+      - name: LOAD_TIMESTAMP
+        expr: "LOAD_TIMESTAMP"
+        data_type: TIMESTAMP_NTZ
+        description: "Timestamp when the data was loaded"
+      - name: PRODUCT_ID
+        expr: "PRODUCT_ID"
+        data_type: TEXT
+        description: "Unique identifier for the product"
+      - name: CUSTOMER_ID
+        expr: "CUSTOMER_ID"
+        data_type: TEXT
+        description: "Unique identifier for the customer"
+      - name: ORDER_LINE_ID
+        expr: "ORDER_LINE_ID"
+        data_type: NUMBER
+        description: "Unique identifier for the order line"
+      - name: SHIP_FROM_SITE
+        expr: "SHIP_FROM_SITE"
+        data_type: TEXT
+        description: "Site from which the product is shipped"
+      - name: SALES_REGION
+        expr: "SALES_REGION"
+        data_type: TEXT
+        description: "Region where the sale occurred"
+      - name: SHIP_DATE
+        expr: "SHIP_DATE"
+        data_type: DATE
+        description: "Date when the product was shipped"
+      - name: ORDER_DATE
+        expr: "ORDER_DATE"
+        data_type: DATE
+        description: "Date when the order was placed"
+      - name: SALES_CHANNEL
+        expr: "SALES_CHANNEL"
+        data_type: TEXT
+        description: "Channel through which the sale was made"
+      - name: INCOTERMS
+        expr: "INCOTERMS"
+        data_type: TEXT
+        description: "Incoterms for the order"
+      - name: PRODUCT_NAME
+        expr: "PRODUCT_NAME"
+        data_type: TEXT
+        description: "Name of the product"
+      - name: ORDER_ID
+        expr: "ORDER_ID"
+        data_type: TEXT
+        description: "Unique identifier for the order"
+      - name: CURRENCY
+        expr: "CURRENCY"
+        data_type: TEXT
+        description: "Currency used for the transaction"
+      - name: CONTRACT_ID
+        expr: "CONTRACT_ID"
+        data_type: TEXT
+        description: "Unique identifier for the contract"
+      - name: SHIP_TO_LOCATION
+        expr: "SHIP_TO_LOCATION"
+        data_type: TEXT
+        description: "Location to which the product is shipped"
+      - name: CUSTOMER_SEGMENT
+        expr: "CUSTOMER_SEGMENT"
+        data_type: TEXT
+        description: "Segment of the customer"
+      - name: CUSTOMER_NAME
+        expr: "CUSTOMER_NAME"
+        data_type: TEXT
+        description: "Name of the customer"
+    facts:
+      - name: FREIGHT_COST
+        expr: "FREIGHT_COST"
+        data_type: FLOAT
+        description: "Cost of freight for the order"
+      - name: REBATE_AMOUNT
+        expr: "REBATE_AMOUNT"
+        data_type: FLOAT
+        description: "Rebate amount for the order"
+      - name: DISCOUNT_PCT
+        expr: "DISCOUNT_PCT"
+        data_type: FLOAT
+        description: "Discount percentage for the order"
+      - name: TOTAL_AMOUNT
+        expr: "TOTAL_AMOUNT"
+        data_type: FLOAT
+        description: "Total amount of the order"
+      - name: UNIT_PRICE
+        expr: "UNIT_PRICE"
+        data_type: FLOAT
+        description: "Unit price of the product"
+      - name: QUANTITY_MT
+        expr: "QUANTITY_MT"
+        data_type: FLOAT
+        description: "Quantity of the product in metric tons"
+verified_queries:
+  - name: total_sales_by_region
+    question: "What is the total sales amount by region?"
+    sql: "SELECT SALES_REGION, SUM(TOTAL_AMOUNT) AS TOTAL_SALES FROM ERP_SALES_ORDERS GROUP BY SALES_REGION"
+  - name: top_customers_by_sales
+    question: "Who are the top customers by total sales amount?"
+    sql: "SELECT CUSTOMER_NAME, SUM(TOTAL_AMOUNT) AS TOTAL_SALES FROM ERP_SALES_ORDERS GROUP BY CUSTOMER_NAME ORDER BY TOTAL_SALES DESC LIMIT 10"
+  - name: sales_by_product
+    question: "What is the total sales amount by product?"
+    sql: "SELECT PRODUCT_NAME, SUM(TOTAL_AMOUNT) AS TOTAL_SALES FROM ERP_SALES_ORDERS GROUP BY PRODUCT_NAME"
+  - name: sales_by_date
+    question: "What is the total sales amount by order date?"
+    sql: "SELECT ORDER_DATE, SUM(TOTAL_AMOUNT) AS TOTAL_SALES FROM ERP_SALES_ORDERS GROUP BY ORDER_DATE"
+  - name: average_discount_by_customer_segment
+    question: "What is the average discount percentage by customer segment?"
+    sql: "SELECT CUSTOMER_SEGMENT, AVG(DISCOUNT_PCT) AS AVERAGE_DISCOUNT FROM ERP_SALES_ORDERS GROUP BY CUSTOMER_SEGMENT"
