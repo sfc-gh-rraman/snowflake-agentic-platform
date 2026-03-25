@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo } from 'react';
 import ReactFlow, {
   Node,
   Edge,
@@ -12,7 +12,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { useWorkflowStore } from '../stores/workflowStore';
 import { Task } from '../types/workflow';
-import { CheckCircle, XCircle, Loader2, Clock, SkipForward } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2, Clock, SkipForward, Shield, Activity } from 'lucide-react';
 
 const statusColors = {
   pending: { bg: 'bg-slate-700', border: 'border-slate-600', text: 'text-slate-300' },
@@ -20,6 +20,13 @@ const statusColors = {
   success: { bg: 'bg-green-900', border: 'border-green-500', text: 'text-green-300' },
   failed: { bg: 'bg-red-900', border: 'border-red-500', text: 'text-red-300' },
   skipped: { bg: 'bg-yellow-900', border: 'border-yellow-500', text: 'text-yellow-300' },
+};
+
+const skillTypeColors: Record<string, string> = {
+  standalone: 'bg-purple-800 text-purple-200',
+  platform: 'bg-blue-800 text-blue-200',
+  infrastructure: 'bg-slate-600 text-slate-200',
+  routing: 'bg-amber-800 text-amber-200',
 };
 
 const StatusIcon = ({ status }: { status: Task['status'] }) => {
@@ -46,18 +53,38 @@ function TaskNode({ data }: { data: Task }) {
     setShowLogModal(true);
   };
 
+  const skillBadge = data.skill_type
+    ? skillTypeColors[data.skill_type] || 'bg-slate-600 text-slate-200'
+    : null;
+
   return (
     <div
       onClick={handleClick}
-      className={`px-4 py-3 rounded-lg border-2 ${colors.bg} ${colors.border} cursor-pointer hover:brightness-110 transition-all min-w-[180px]`}
+      className={`px-4 py-3 rounded-lg border-2 ${colors.bg} ${colors.border} cursor-pointer hover:brightness-110 transition-all min-w-[200px]`}
     >
       <Handle type="target" position={Position.Top} className="!bg-slate-500" />
-      
+
       <div className="flex items-center gap-2 mb-1">
         <StatusIcon status={data.status} />
-        <span className={`font-medium ${colors.text}`}>{data.name}</span>
+        <span className={`font-medium text-sm ${colors.text}`}>{data.name}</span>
       </div>
-      
+
+      {data.skill_name && (
+        <div className="flex items-center gap-1 mt-1">
+          {data.skill_type === 'platform' ? (
+            <Shield className="w-3 h-3 text-blue-400" />
+          ) : (
+            <Activity className="w-3 h-3 text-purple-400" />
+          )}
+          <span className="text-xs text-slate-400">{data.skill_name}</span>
+          {skillBadge && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${skillBadge}`}>
+              {data.skill_type}
+            </span>
+          )}
+        </div>
+      )}
+
       {data.status === 'running' && (
         <div className="mt-2">
           <div className="h-1 bg-slate-600 rounded-full overflow-hidden">
@@ -69,17 +96,17 @@ function TaskNode({ data }: { data: Task }) {
           <span className="text-xs text-slate-400 mt-1">{data.progress}%</span>
         </div>
       )}
-      
+
       {data.duration !== null && data.status === 'success' && (
         <span className="text-xs text-slate-400">{data.duration.toFixed(1)}s</span>
       )}
-      
+
       {data.error && (
-        <p className="text-xs text-red-400 mt-1 truncate max-w-[160px]" title={data.error}>
+        <p className="text-xs text-red-400 mt-1 truncate max-w-[180px]" title={data.error}>
           {data.error}
         </p>
       )}
-      
+
       <Handle type="source" position={Position.Bottom} className="!bg-slate-500" />
     </div>
   );
@@ -95,15 +122,14 @@ export function WorkflowGraph() {
   const { nodes, edges } = useMemo(() => {
     const nodes: Node[] = [];
     const edges: Edge[] = [];
-    const taskPositions: Record<string, { x: number; y: number }> = {};
 
     let yOffset = 50;
-    
-    phases.forEach((phase, phaseIndex) => {
+
+    phases.forEach((phase) => {
       nodes.push({
         id: `phase-${phase.id}`,
         type: 'default',
-        position: { x: 50, y: yOffset },
+        position: { x: 30, y: yOffset },
         data: { label: phase.name },
         style: {
           background: 'transparent',
@@ -111,17 +137,15 @@ export function WorkflowGraph() {
           color: '#94a3b8',
           fontSize: '14px',
           fontWeight: 'bold',
-          width: 150,
+          width: 180,
         },
         draggable: false,
       });
 
       phase.tasks.forEach((task, taskIndex) => {
-        const x = 250 + taskIndex * 220;
+        const x = 230 + taskIndex * 240;
         const y = yOffset;
-        
-        taskPositions[task.id] = { x, y };
-        
+
         nodes.push({
           id: task.id,
           type: 'task',
@@ -136,16 +160,19 @@ export function WorkflowGraph() {
             target: task.id,
             type: 'smoothstep',
             animated: task.status === 'running',
-            style: { stroke: '#475569', strokeWidth: 2 },
+            style: {
+              stroke: task.status === 'running' ? '#06b6d4' : '#475569',
+              strokeWidth: 2,
+            },
             markerEnd: {
               type: MarkerType.ArrowClosed,
-              color: '#475569',
+              color: task.status === 'running' ? '#06b6d4' : '#475569',
             },
           });
         });
       });
 
-      yOffset += 120;
+      yOffset += 130;
     });
 
     return { nodes, edges };
@@ -159,7 +186,7 @@ export function WorkflowGraph() {
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.2 }}
-        minZoom={0.5}
+        minZoom={0.4}
         maxZoom={1.5}
         defaultEdgeOptions={{
           type: 'smoothstep',

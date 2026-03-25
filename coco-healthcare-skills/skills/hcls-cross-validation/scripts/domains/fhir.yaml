@@ -1,0 +1,64 @@
+domain: fhir
+tables:
+  patient:
+    required_columns: [id, family_name, given_name, birth_date, gender]
+    primary_key: [id]
+    type_expectations:
+      id: VARCHAR
+      birth_date: DATE
+      gender: VARCHAR
+    semantic_checks:
+      - type: allowed_values
+        column: gender
+        values: [male, female, other, unknown]
+      - type: reference_format
+        column: id
+        pattern: "^[A-Za-z0-9\\-\\.]{1,64}$"
+
+  observation:
+    required_columns: [id, status, code_code, effective_datetime]
+    primary_key: [id]
+    type_expectations:
+      id: VARCHAR
+      status: VARCHAR
+      effective_datetime: TIMESTAMP_NTZ
+    semantic_checks:
+      - type: allowed_values
+        column: status
+        values: [registered, preliminary, final, amended, corrected, cancelled, entered-in-error, unknown]
+
+  condition:
+    required_columns: [id, code_code, clinical_status]
+    primary_key: [id]
+    type_expectations:
+      id: VARCHAR
+      clinical_status: VARCHAR
+    semantic_checks:
+      - type: allowed_values
+        column: clinical_status
+        values: [active, recurrence, relapse, inactive, remission, resolved]
+
+  encounter:
+    required_columns: [id, status, type_code]
+    primary_key: [id]
+    type_expectations:
+      id: VARCHAR
+      status: VARCHAR
+    semantic_checks:
+      - type: allowed_values
+        column: status
+        values: [planned, arrived, triaged, in-progress, onleave, finished, cancelled, entered-in-error, unknown]
+
+  medication_request:
+    required_columns: [id, status, intent, medication_code]
+    primary_key: [id]
+    type_expectations:
+      id: VARCHAR
+      status: VARCHAR
+    semantic_checks:
+      - type: allowed_values
+        column: status
+        values: [active, on-hold, cancelled, completed, entered-in-error, stopped, draft, unknown]
+      - type: allowed_values
+        column: intent
+        values: [proposal, plan, order, original-order, reflex-order, filler-order, instance-order, option]

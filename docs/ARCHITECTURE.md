@@ -1,37 +1,62 @@
-# Zero-to-One Agentic Data Platform
+# Industry Solutions Architect: Architecture
 
-> From use case description + raw data → deployed AI application
+> Describe the business problem. The platform builds the solution.
 
 ## Vision
 
-A self-assembling agent system that takes a natural language use case description and raw data assets, then autonomously builds and deploys a complete AI-powered application — without domain-specific templates or pre-built components.
+A composable, skill-based orchestrator on Cortex Code that receives natural language healthcare
+requests and autonomously composes the right combination of industry skills and Snowflake platform
+capabilities into end-to-end solutions -- from data ingestion through governance to analytics
+and applications.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  INPUT                                                                      │
-│  ├── Use Case: "I have sensor data and daily reports. Need to predict      │
-│  │              equipment failures and search historical incidents."        │
-│  └── Data: [sensor_readings.parquet, reports/*.pdf]                        │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    SELF-ASSEMBLING AGENT SYSTEM                             │
-│                                                                             │
-│  Meta-Agent → Discovery → Preprocessing → Validation → Feature Store →     │
-│  ML Models → Search Index → App Generation → Deployment                     │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  OUTPUT                                                                     │
-│  ├── Deployed React + FastAPI application on SPCS                          │
-│  ├── Cortex Search service for document retrieval                          │
-│  ├── Cortex Analyst semantic model for data queries                        │
-│  ├── Registered ML models for predictions                                  │
-│  └── Cortex Agent orchestrating all tools                                  │
-└─────────────────────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------------------+
+|  INPUT                                                                  |
+|  "I have DICOM files from radiology, FHIR bundles from Epic, and      |
+|   daily clinical reports. Build an imaging analytics platform with      |
+|   document search, PHI governance, and a patient dashboard."            |
++-------------------------------------------------------------------------+
+                                  |
+                                  v
++-------------------------------------------------------------------------+
+|  ORCHESTRATOR (Generated System Prompt on Cortex Code)                  |
+|                                                                         |
+|  Intent Detection --> Domain Routing --> Skill Composition              |
+|  --> Platform Affinities --> Plan Gate --> Step-by-Step Execution        |
++-------------------------------------------------------------------------+
+        |            |             |             |             |
+        v            v             v             v             v
+   +--------+  +---------+  +---------+  +-----------+  +----------+
+   |Provider |  |Provider |  | Pharma  |  |  Pharma   |  |  Cross-  |
+   |Imaging  |  |ClinData |  |DrugSafe |  | Genomics  |  | Industry |
+   +--------+  +---------+  +---------+  +-----------+  +----------+
+        |            |             |             |             |
+        +------+-----+------+-----+------+------+------+------+
+               |            |            |             |
+               v            v            v             v
+   +---------------------------------------------------------------+
+   |  SNOWFLAKE PLATFORM SKILLS (Bundled in Cortex Code)           |
+   |  Dynamic Tables | Governance | Streamlit | SPCS | ML | dbt    |
+   |  Cortex AI | Cortex Agent | Cortex Search | Semantic View     |
+   +---------------------------------------------------------------+
+               |
+               v
+   +---------------------------------------------------------------+
+   |  CORTEX KNOWLEDGE EXTENSIONS (CKEs)                           |
+   |  PubMed RAG | ClinicalTrials.gov RAG | Data Model Knowledge   |
+   +---------------------------------------------------------------+
+               |
+               v
++-------------------------------------------------------------------------+
+|  OUTPUT                                                                 |
+|  +-- Curated Snowflake tables (FHIR, OMOP, DICOM, claims)             |
+|  +-- Cortex Search services over clinical documents and imaging        |
+|  +-- Semantic views for natural language analytics                     |
+|  +-- Trained ML models registered in Snowflake ML Registry            |
+|  +-- Cortex Agent wiring Search + Analyst + ML tools                  |
+|  +-- Streamlit dashboards or React + SPCS applications                |
+|  +-- HIPAA governance (masking, row-access, audit trails)             |
++-------------------------------------------------------------------------+
 ```
 
 ---
@@ -40,1132 +65,817 @@ A self-assembling agent system that takes a natural language use case descriptio
 
 | Principle | Description |
 |-----------|-------------|
-| **Domain Agnostic** | No pre-built domain templates. Agents discover and adapt to any domain. |
-| **Generated, Not Templated** | App code is generated by LLMs, not filled into templates. |
-| **Granular Sub-Agents** | Deep agent hierarchies with specialized sub-agents for each task. |
-| **Self-Healing** | Sophisticated validation with retry loops and error recovery. |
-| **Snowflake Native** | All state, compute, and AI services run on Snowflake. |
-| **Cortex Maximalist** | Leverage every Cortex capability: LLM, Search, Analyst, Agents. |
+| **Composable Skills** | Independent building blocks, not monolithic scripts. Each skill encodes deep domain expertise. |
+| **Orchestrator-Driven** | A generated system prompt detects intent, routes across domains, and chains skills into solutions. |
+| **Plan-Gated** | No execution without explicit user approval. Every multi-step task goes through a plan gate. |
+| **Generated, Not Hand-Edited** | Orchestrator is generated from YAML registry + Jinja2 template. Skills snap in automatically. |
+| **Knowledge-Grounded** | CKEs provide RAG search over PubMed, ClinicalTrials.gov, and internal data models. |
+| **Governance by Default** | HIPAA guardrails enforced as cross-cutting concerns across all workflows. |
+| **Snowflake Native** | All data, compute, AI services, and governance run on Snowflake. |
+| **Cortex Maximalist** | Leverage every Cortex capability: LLM, Search, Analyst, Agent, AI Functions. |
 
 ---
 
-## Architecture Overview
+## Three-Layer Architecture
 
-### Layer 0: Meta-Agent (Planner)
-
-The Meta-Agent is the brain of the system. It doesn't execute — it **plans**.
+The system has three layers that work together to produce the orchestrator.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           META-AGENT (Planner)                              │
-│                                                                             │
-│  Responsibilities:                                                          │
-│  1. Parse use case description to understand intent                        │
-│  2. Analyze raw data assets to understand available resources              │
-│  3. Query Agent Registry for available capabilities                        │
-│  4. Generate execution plan (DAG of agents)                                │
-│  5. Define data flow between agents                                        │
-│  6. Specify app requirements for final generation                          │
-│                                                                             │
-│  Implementation:                                                            │
-│  - Cortex Agent with tools:                                                │
-│    ├── use_case_parser (Cortex LLM)                                        │
-│    ├── data_scanner (Snowflake stage operations)                           │
-│    ├── agent_registry_query (Cortex Search over agent capabilities)        │
-│    └── plan_generator (Cortex LLM with structured output)                  │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
++------------------------------------------------------------------+
+|  Layer 1: YAML REGISTRY                                          |
+|  templates/skills_incubator.yaml                                 |
+|                                                                  |
+|  Single source of truth for all skills:                          |
+|  - Skill names, triggers, descriptions, domains                  |
+|  - Sub-skills and router relationships                           |
+|  - Cross-domain composition patterns                             |
+|  - Overlap declarations                                          |
+|  - CKE metadata (data sources, used_by, invoke_when)             |
+|  - Profile metadata (name, description, intro text)              |
++------------------------------------------------------------------+
+                          |
+                          v
++------------------------------------------------------------------+
+|  Layer 2: JINJA2 TEMPLATE                                        |
+|  templates/orchestrator.md.j2                                    |
+|                                                                  |
+|  Parameterized Markdown defining orchestrator structure:          |
+|  - Plan-then-Execute protocol (static)                           |
+|  - Platform Skill Selection algorithm (static)                   |
+|  - Routing rules (static)                                        |
+|  - Skill taxonomy tree (from registry)                           |
+|  - Routing tables (from registry)                                |
+|  - Cross-domain patterns (from registry)                         |
+|  - CKE routing (from registry)                                   |
+|  - Guardrails and anti-patterns (static)                         |
++------------------------------------------------------------------+
+                          |
+                          v
++------------------------------------------------------------------+
+|  Layer 3: GENERATED ORCHESTRATOR AGENT                           |
+|  agents/health-sciences-incubator.md                             |
+|                                                                  |
+|  Complete Markdown file with YAML frontmatter that Cortex Code   |
+|  loads as a system prompt. NEVER hand-edited.                    |
++------------------------------------------------------------------+
 ```
 
-**Output: Execution Plan**
+### Generation Flow
 
-```json
-{
-  "execution_plan": {
-    "id": "plan_20260304_143022",
-    "use_case_summary": "Equipment failure prediction with document search",
-    "detected_domain": "industrial_operations",
-    "phases": [
-      {
-        "phase_id": "discovery",
-        "agents": ["file_scanner", "schema_profiler"],
-        "parallel": true,
-        "checkpoint": true
-      },
-      {
-        "phase_id": "preprocessing",
-        "agents": [
-          {
-            "agent": "parquet_processor",
-            "input": "sensor_readings.parquet",
-            "config": {"time_column": "auto_detect"}
-          },
-          {
-            "agent": "document_chunker",
-            "input": "reports/*.pdf",
-            "config": {"chunk_size": 512, "overlap": 50}
-          }
-        ],
-        "parallel": true,
-        "checkpoint": true
-      },
-      {
-        "phase_id": "validation",
-        "agents": ["data_quality_validator", "semantic_validator"],
-        "retry_on_failure": true,
-        "max_retries": 3,
-        "checkpoint": true
-      },
-      {
-        "phase_id": "feature_engineering",
-        "agents": ["feature_store_builder"],
-        "depends_on": ["parquet_processor"],
-        "checkpoint": true
-      },
-      {
-        "phase_id": "ml_training",
-        "agents": [
-          {
-            "agent": "ml_model_builder",
-            "config": {
-              "task": "anomaly_detection",
-              "target": "equipment_failure"
-            }
-          }
-        ],
-        "checkpoint": true
-      },
-      {
-        "phase_id": "search_indexing",
-        "agents": ["cortex_search_builder"],
-        "depends_on": ["document_chunker"],
-        "checkpoint": true
-      },
-      {
-        "phase_id": "semantic_model",
-        "agents": ["semantic_model_generator"],
-        "depends_on": ["parquet_processor", "feature_store_builder"],
-        "checkpoint": true
-      },
-      {
-        "phase_id": "app_generation",
-        "agents": ["app_spec_generator", "code_generator", "test_agent"],
-        "checkpoint": true
-      },
-      {
-        "phase_id": "deployment",
-        "agents": ["spcs_deployer"],
-        "checkpoint": true
-      }
-    ]
-  },
-  "app_requirements": {
-    "features": [
-      {
-        "type": "chat",
-        "context_sources": ["cortex_search", "cortex_analyst"],
-        "description": "Natural language queries over documents and sensor data"
-      },
-      {
-        "type": "dashboard",
-        "metrics": "auto_detect_from_data",
-        "description": "Real-time metrics and visualizations"
-      },
-      {
-        "type": "ml_inference",
-        "models": ["anomaly_detector"],
-        "description": "Equipment failure predictions"
-      },
-      {
-        "type": "document_search",
-        "source": "cortex_search",
-        "description": "Search historical reports and incidents"
-      }
-    ],
-    "iteration_enabled": true
-  }
-}
+```
+skills_incubator.yaml --+
+                        |--> generate_orchestrators.py --> health-sciences-incubator.md
+orchestrator.md.j2   --+
+```
+
+```bash
+python scripts/generate_orchestrators.py --profile incubator
+```
+
+### Twin Orchestrator Model
+
+| Property | Incubator | Production |
+|----------|-----------|------------|
+| Registry | `skills_incubator.yaml` | `skills_production.yaml` |
+| Output | `health-sciences-incubator.md` | `health-sciences-solutions.md` |
+| Skills | All (experimental + mature) | Graduated only |
+| Audience | SEs, SAs, contributors | Field teams, customers |
+| Gate | Skills land via PR to main | Skills graduate via Tiger Team review |
+
+---
+
+## Plan-then-Execute Protocol
+
+Every health sciences task follows a mandatory two-phase protocol.
+
+### Phase 1: Plan (Mandatory Gate)
+
+```
+User Request
+    |
+    v
+1. Identify sub-industry (Provider, Pharma, Payer)
+    |
+    v
+2. Route by task if sub-industry is ambiguous
+    |
+    v
+3. Scan Skill Routing Tables for trigger keyword matches
+    |
+    v
+4. Check Cross-Domain Patterns if request spans business functions
+    |
+    v
+5. Evaluate Platform Affinities for each skill in the plan
+    |
+    v
+6. Build numbered solution plan:
+   - Skill name
+   - What it produces
+   - Dependencies
+   - Governance applicability
+    |
+    v
+7. Present plan to user via ask_user_question
+    |
+    v
+8. WAIT for explicit approval
+```
+
+### Phase 2: Execute (Only After Approval)
+
+```
+Approved Plan
+    |
+    v
+1. Execute each step in approved order
+    |
+    v
+2. Invoke skills via `skill` tool (never bypass with raw SQL/Bash)
+    |
+    v
+3. Run preflight checks (CKEs, Data Model Knowledge auto-detect)
+    |
+    v
+4. Apply governance guardrails on all patient/clinical data
+    |
+    v
+5. Enrich with CKEs when plan calls for evidence grounding
+    |
+    v
+6. Report back after each major step for user course-correction
+    |
+    v
+7. Test and validate before declaring success
+```
+
+### Lightweight Gate
+
+For simple single-skill queries, informational questions, or follow-up steps within an
+already-approved plan, the gate can be a single sentence + confirmation.
+
+### Example
+
+```
+User: "Design a Phase III trial for a GLP-1 receptor agonist for T2D"
+
+Orchestrator builds plan:
+  1. $hcls-cross-cke-clinical-trials   --> search for STEP trial references
+  2. $hcls-cross-cke-pubmed            --> review STEP trial publications
+  3. $hcls-pharma-genomics-survival-analysis --> power analysis for endpoints
+  4. $hcls-pharma-dsafety-clinical-trial-protocol --> generate protocol
+  5. cortex-ai-functions               --> AI_COMPLETE for narrative (affinity)
+
+Orchestrator presents plan via ask_user_question --> user approves --> execute
 ```
 
 ---
 
-### Agent Registry (Capability Catalog)
+## Routing Logic
 
-Every agent registers its capabilities in a searchable catalog (Cortex Search).
+The orchestrator uses a four-step algorithm to determine which skills to invoke.
+
+### Step 1: Route by Sub-Industry
+
+| Customer Type | Sub-Industry | Examples |
+|---------------|--------------|----------|
+| Hospital, health system, clinic, IDN | Provider | Epic, Cerner, clinical research orgs |
+| Pharma, biotech, CRO | Pharma | Drug development, trials, genomics |
+| Health plan, TPA, PBM | Payer | Claims adjudication, member analytics |
+
+### Step 2: Route by Task (Disambiguation)
+
+When the customer straddles sub-industries, route by the TASK being performed:
+
+| Task Type | Route To | Regardless Of |
+|-----------|----------|---------------|
+| Clinical data / EHR | Provider > Clinical Data Management | Customer type |
+| Drug safety / adverse events | Pharma > Drug Safety | Customer type |
+| Imaging workflows | Provider > Clinical Research | Customer type |
+| Genomic analysis | Pharma > Genomics | Customer type |
+| Claims analysis | Provider > Revenue Cycle | Context-dependent |
+
+### Step 3: Cross-Industry Skills
+
+Available to ALL sub-industries:
+
+- `hcls-cross-research-problem-selection` -- scientific problem validation
+- `hcls-cross-cke-pubmed` -- PubMed biomedical literature search
+- `hcls-cross-cke-clinical-trials` -- ClinicalTrials.gov registry search
+
+### Step 4: Accept Overlaps
+
+Some skills serve multiple sub-industries:
+
+- `claims-data-analysis` -- Provider (revenue cycle) + Payer (claims processing)
+- `survival-analysis` -- Pharma (clinical outcomes) + Provider (clinical research)
+- `clinical-nlp` -- Provider (EHR extraction) + Pharma (safety narrative mining)
+- `clinical-docs` -- Provider (document intelligence) + Pharma (safety narrative extraction)
+
+---
+
+## Skill Taxonomy
+
+Skills are organized in a five-level hierarchy:
+
+```
+Industry / Sub-Industry / Business Function / Use Case Skill / Sub-Skill
+```
+
+Naming convention encodes hierarchy in a flat directory structure:
+
+```
+hcls-{sub-industry}-{function}-{skill}
+```
+
+### Skill Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| **Router** | Detects intent, routes to sub-skills. Has setup, preflight, workflow. | `hcls-provider-imaging` (7 sub-skills) |
+| **Sub-skill** | Handles one task within a router. Loaded by router, not user. | `dicom-parser`, `clinical-docs-search` |
+| **Standalone** | Self-contained, no router or sub-skills. | `hcls-provider-cdata-fhir` |
+
+### Full Taxonomy
+
+```
+Health Sciences
+|-- Provider
+|   |-- Clinical Research
+|   |   |-- hcls-provider-imaging (router + 7 sub-skills)
+|   |   +-- hcls-provider-imaging-dicom-parser (standalone)
+|   |-- Clinical Data Management
+|   |   |-- hcls-provider-cdata-fhir
+|   |   |-- hcls-provider-cdata-clinical-nlp
+|   |   |-- hcls-provider-cdata-omop
+|   |   +-- hcls-provider-cdata-clinical-docs (router + 5 sub-skills)
+|   +-- Revenue Cycle
+|       +-- hcls-provider-claims-data-analysis
+|
+|-- Pharma
+|   |-- Drug Safety
+|   |   |-- hcls-pharma-dsafety-pharmacovigilance
+|   |   +-- hcls-pharma-dsafety-clinical-trial-protocol
+|   |-- Genomics
+|   |   |-- hcls-pharma-genomics-nextflow
+|   |   |-- hcls-pharma-genomics-variant-annotation
+|   |   |-- hcls-pharma-genomics-single-cell-qc
+|   |   |-- hcls-pharma-genomics-scvi-tools
+|   |   +-- hcls-pharma-genomics-survival-analysis
+|   +-- Lab Operations
+|       +-- hcls-pharma-lab-allotrope
+|
+|-- Payer
+|   +-- Claims Processing
+|       +-- (future skills)
+|
++-- Cross-Industry
+    |-- Research Strategy: hcls-cross-research-problem-selection
+    +-- Knowledge Extensions: cke-pubmed, cke-clinical-trials
+```
+
+### Skill Structure
+
+```
+hcls-{sub}-{func}-{skill}/
++-- SKILL.md           # Main instructions (required)
++-- scripts/           # Python helper scripts
++-- references/        # Domain documentation
++-- assets/            # Templates (optional)
+```
+
+### Router Skill Internal Structure
+
+```
+hcls-provider-imaging/
++-- SKILL.md                    # Router: intent detection + Step 0 pre-query
++-- dicom-parser/SKILL.md       # Sub-skill
++-- dicom-ingestion/SKILL.md
++-- dicom-analytics/SKILL.md
++-- imaging-viewer/SKILL.md
++-- imaging-governance/SKILL.md
++-- imaging-ml/SKILL.md
++-- data-model-knowledge/SKILL.md
+```
+
+---
+
+## Platform Affinities
+
+Platform affinities are a declarative mechanism for industry skills to declare which Snowflake
+platform skills enhance them and under what conditions.
+
+### How It Works
+
+Each SKILL.md declares `platform_affinities` in its YAML frontmatter:
 
 ```yaml
-# Agent: Parquet Processor
-agent_id: parquet_processor
-version: "1.0"
-description: "Processes parquet files into curated Snowflake tables"
-capabilities:
-  - ingest_parquet
-  - schema_inference
-  - data_profiling
-  - quality_assessment
-  - transformation
-  - snowflake_table_creation
-input_types:
-  - file_type: parquet
-  - file_type: delta
-output_types:
-  - snowflake_table
-  - data_profile_report
-  - quality_report
-triggers:
-  keywords: ["tabular data", "sensor readings", "time series", "structured data", "parquet"]
-  file_patterns: ["*.parquet", "*.delta"]
-sub_agents:
-  - scanner
-  - schema_inferrer
-  - profiler
-  - quality_checker
-  - transformer
-  - loader
-snowflake_resources:
-  - cortex_llm: schema_analysis
-  - cortex_llm: quality_recommendations
+---
+name: hcls-provider-cdata-fhir
+platform_affinities:
+  produces: [tables, views, stages]
+  benefits_from:
+    - skill: dynamic-tables
+      when: "incremental refresh or ongoing FHIR feeds"
+    - skill: data-governance
+      when: "FHIR tables contain PHI"
+    - skill: developing-with-streamlit
+      when: "user wants a patient data dashboard"
+---
 ```
 
-```yaml
-# Agent: Document Chunker
-agent_id: document_chunker
-version: "1.0"
-description: "Extracts and chunks documents for RAG"
-capabilities:
-  - pdf_extraction
-  - docx_extraction
-  - text_chunking
-  - metadata_extraction
-  - chunk_table_creation
-input_types:
-  - file_type: pdf
-  - file_type: docx
-  - file_type: txt
-  - file_type: md
-output_types:
-  - chunk_table
-  - document_metadata_table
-triggers:
-  keywords: ["reports", "documents", "unstructured", "knowledge base", "search"]
-  file_patterns: ["*.pdf", "*.docx", "*.txt", "*.md"]
-sub_agents:
-  - extractor
-  - chunker
-  - metadata_parser
-  - embedder
-snowflake_resources:
-  - cortex_llm: content_summarization
-  - cortex_llm: metadata_extraction
+### Affinity Evaluation Algorithm
+
+```
+For each domain skill in the plan:
+    |
+    v
+1. Read platform_affinities from SKILL.md frontmatter
+    |
+    v
+2. For each benefits_from entry:
+   evaluate 'when' condition against user's request
+    |
+    v
+3. If condition matches: add platform skill as follow-on step
+    |
+    v
+4. Deduplicate: if multiple skills trigger the same platform skill, include once
 ```
 
-```yaml
-# Agent: ML Model Builder
-agent_id: ml_model_builder
-version: "1.0"
-description: "Builds and registers ML models"
-capabilities:
-  - classification
-  - regression
-  - anomaly_detection
-  - time_series_forecasting
-  - model_registration
-  - inference_function_creation
-input_types:
-  - snowflake_table
-  - feature_store
-output_types:
-  - registered_model
-  - inference_function
-  - model_card
-triggers:
-  keywords: ["predict", "detect", "forecast", "classify", "model", "ML"]
-sub_agents:
-  - task_classifier
-  - feature_selector
-  - model_trainer
-  - evaluator
-  - registry_agent
-  - explainability_agent
-snowflake_resources:
-  - cortex_llm: feature_recommendations
-  - cortex_llm: model_explanation
-  - ml_registry: model_storage
-```
+### 10 Platform Skills Available
 
-```yaml
-# Agent: App Code Generator
-agent_id: app_code_generator
-version: "1.0"
-description: "Generates React + FastAPI application code"
-capabilities:
-  - react_component_generation
-  - fastapi_endpoint_generation
-  - cortex_integration_code
-  - dockerfile_generation
-  - nginx_config_generation
-input_types:
-  - app_spec
-  - cortex_services
-  - snowflake_tables
-output_types:
-  - react_frontend
-  - fastapi_backend
-  - deployment_configs
-triggers:
-  keywords: ["app", "frontend", "backend", "deploy", "UI"]
-sub_agents:
-  - spec_parser
-  - component_generator
-  - api_generator
-  - integration_generator
-  - config_generator
-  - test_generator
-snowflake_resources:
-  - cortex_llm: code_generation
-  - cortex_llm: code_review
+| Platform Skill | When to Include |
+|----------------|-----------------|
+| `dynamic-tables` | Incremental refresh, ongoing data feeds, streaming pipelines |
+| `data-governance` | PHI/PII present, masking policies, row-access policies, audit |
+| `data-quality` | Data validation, conformance checks, completeness monitoring |
+| `semantic-view` | Natural language queries, analytics layer, BI integration |
+| `developing-with-streamlit` | Dashboards, viewers, interactive UIs |
+| `deploy-to-spcs` | Container services, GPU compute, custom viewers |
+| `machine-learning` | Model training, registry, deployment, inference |
+| `cortex-ai-functions` | AI_PARSE_DOCUMENT, AI_COMPLETE, AI_EXTRACT, text analytics |
+| `cortex-agent` | Conversational agents over domain data |
+| `search-optimization` | Full-text or semantic search over extracted content |
+
+### Worked Example
+
+```
+User: "Build a FHIR data pipeline with a patient dashboard and PHI masking"
+
+1. $hcls-provider-cdata-fhir selected (triggers: FHIR, HL7, Patient resource)
+2. Read affinities: produces=[tables, views, stages]
+3. Evaluate: dynamic-tables when 'incremental refresh'    --> YES (pipeline = ongoing)
+4. Evaluate: data-governance when 'PHI present'           --> YES (user said PHI masking)
+5. Evaluate: developing-with-streamlit when 'dashboard'   --> YES
+6. Final plan: FHIR ingest -> Dynamic Tables -> Governance -> Streamlit dashboard
 ```
 
 ---
 
-### Sub-Agent Architecture: Parquet Processor (Deep Dive)
+## Cortex Knowledge Extensions (CKEs)
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      PARQUET PROCESSOR AGENT                                │
-│                                                                             │
-│  Orchestration: LangGraph State Machine                                     │
-│  State Storage: Snowflake Tables                                            │
-│                                                                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Sub-State 1: SCAN                                                          │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: file_scanner                                                 │   │
-│  │  Actions:                                                            │   │
-│  │  ├── List files matching input pattern                              │   │
-│  │  ├── Get file sizes, modification dates                             │   │
-│  │  ├── Sample first N rows from each file                             │   │
-│  │  └── Store file manifest to AGENT_STATE.SCAN_RESULTS                │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Analyze file naming patterns for insights                 │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Sub-State 2: SCHEMA_INFER                                                  │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: schema_inferrer                                              │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Read sample data from each file                                │   │
-│  │  ├── Infer column data types                                        │   │
-│  │  ├── Detect timestamp columns (multiple formats)                    │   │
-│  │  ├── Identify categorical vs continuous                             │   │
-│  │  ├── Detect potential primary/foreign keys                          │   │
-│  │  └── Store schema to AGENT_STATE.SCHEMA_DEFINITIONS                 │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  ├── LLM: Semantic column name analysis                             │   │
-│  │  └── LLM: Suggest column descriptions                               │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Sub-State 3: PROFILE                                                       │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: profiler                                                     │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Calculate null percentage per column                           │   │
-│  │  ├── Compute unique value counts                                    │   │
-│  │  ├── Calculate min/max/mean/stddev for numerics                     │   │
-│  │  ├── Detect date ranges and gaps                                    │   │
-│  │  ├── Identify value distributions                                   │   │
-│  │  └── Store profile to AGENT_STATE.DATA_PROFILES                     │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Generate data quality narrative                           │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Sub-State 4: QUALITY_CHECK                                                 │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: quality_checker                                              │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Detect outliers using statistical methods                      │   │
-│  │  ├── Identify data gaps (time series)                               │   │
-│  │  ├── Check for duplicate rows                                       │   │
-│  │  ├── Validate value ranges against inferred constraints             │   │
-│  │  ├── Cross-file consistency checks                                  │   │
-│  │  └── Store issues to AGENT_STATE.QUALITY_ISSUES                     │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  ├── LLM: Classify issue severity                                   │   │
-│  │  └── LLM: Recommend remediation strategies                          │   │
-│  │  On Failure:                                                         │   │
-│  │  └── Route to VALIDATION_AGENT with issue context                   │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Sub-State 5: TRANSFORM                                                     │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: transformer                                                  │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Apply null handling strategy (drop/fill/flag)                  │   │
-│  │  ├── Normalize column names (snake_case, remove special chars)      │   │
-│  │  ├── Cast columns to appropriate Snowflake types                    │   │
-│  │  ├── Add metadata columns (source_file, load_timestamp)             │   │
-│  │  ├── Apply business transformations (if specified)                  │   │
-│  │  └── Store transform plan to AGENT_STATE.TRANSFORM_PLAN             │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Generate transformation SQL                               │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Sub-State 6: LOAD                                                          │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: loader                                                       │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Create target Snowflake table with inferred schema             │   │
-│  │  ├── Execute COPY INTO from stage                                   │   │
-│  │  ├── Create clustering keys if beneficial                           │   │
-│  │  ├── Add search optimization if applicable                          │   │
-│  │  ├── Verify row counts match expectations                           │   │
-│  │  └── Store table reference to AGENT_STATE.CREATED_TABLES            │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Generate table documentation                              │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+CKEs are standalone composable skills backed by Cortex Search Services. They provide on-demand
+RAG search over external knowledge corpora.
+
+### External CKEs (Marketplace)
+
+| CKE Skill | Data Source | Invoke When |
+|-----------|-------------|-------------|
+| `hcls-cross-cke-pubmed` | PubMed biomedical literature | Drug-event associations, radiology research, clinical NLP context, research landscape review |
+| `hcls-cross-cke-clinical-trials` | ClinicalTrials.gov registry | Trial design benchmarking, feasibility analysis, eligibility criteria, endpoint definitions |
+
+### Internal CKEs (Data Model Knowledge)
+
+Router skills use internal CKE layers -- Cortex Search Services over their own data models.
+These auto-fire as a pre-step (Step 0) to ground DDL generation, extraction config, and
+schema queries in live reference models.
+
+| Router | Search Service | What It Answers |
+|--------|---------------|-----------------|
+| `hcls-provider-imaging` | `DICOM_MODEL_SEARCH_SVC` | Table definitions, column types, DICOM tags, PHI indicators |
+| `hcls-provider-cdata-clinical-docs` | `CLINICAL_DOCS_MODEL_SEARCH_SVC` + `CLINICAL_DOCS_SPECS_SEARCH_SVC` | Schema + doc type specs, extraction prompts, field definitions |
+
+### Preflight Pattern
+
+Before invoking any CKE, the skill runs a probe query to verify the Marketplace listing
+is installed. If MISSING, the skill skips CKE enrichment gracefully and continues with its
+primary task. Skills work without CKEs but provide richer results with them.
+
+```python
+checker = PreflightChecker(conn)
+checker.add_cortex_search(
+    name="DICOM Model Search Service",
+    svc_fqn="UNSTRUCTURED_HEALTHDATA.DATA_MODEL_KNOWLEDGE.DICOM_MODEL_SEARCH_SVC",
+    setup="Run: scripts/setup_dicom_model_knowledge_repo.sql",
+    fallback="Skill will use hardcoded DICOM schema definitions instead of dynamic search.",
+    required=False,
+)
+results = checker.run()
+# Status: READY | MISSING | ERROR | SKIPPED
 ```
 
 ---
 
-### Sub-Agent Architecture: Document Chunker (Deep Dive)
+## Cross-Domain Composition Patterns
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      DOCUMENT CHUNKER AGENT                                 │
-│                                                                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Sub-State 1: EXTRACT                                                       │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: extractor                                                    │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Detect document type (PDF, DOCX, TXT, etc.)                    │   │
-│  │  ├── Extract raw text using appropriate parser                      │   │
-│  │  ├── Preserve document structure (headers, sections)                │   │
-│  │  ├── Extract embedded tables and images                             │   │
-│  │  └── Store raw content to AGENT_STATE.EXTRACTED_DOCS                │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: OCR post-processing for scanned documents                 │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Sub-State 2: ANALYZE_STRUCTURE                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: structure_analyzer                                           │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Identify document type (report, manual, email, etc.)           │   │
-│  │  ├── Detect sections and hierarchy                                  │   │
-│  │  ├── Identify key entities and dates                                │   │
-│  │  ├── Determine optimal chunking strategy                            │   │
-│  │  └── Store structure to AGENT_STATE.DOC_STRUCTURES                  │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  ├── LLM: Document classification                                   │   │
-│  │  └── LLM: Entity extraction                                         │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Sub-State 3: CHUNK                                                         │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: chunker                                                      │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Apply chunking strategy (semantic, fixed, hybrid)              │   │
-│  │  ├── Maintain chunk overlap for context preservation                │   │
-│  │  ├── Preserve section boundaries where possible                     │   │
-│  │  ├── Add chunk metadata (position, section, page)                   │   │
-│  │  └── Store chunks to AGENT_STATE.DOC_CHUNKS                         │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Generate chunk summaries                                  │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Sub-State 4: ENRICH_METADATA                                               │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: metadata_enricher                                            │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Extract document-level metadata (author, date, title)          │   │
-│  │  ├── Generate keywords and tags                                     │   │
-│  │  ├── Identify relationships between documents                       │   │
-│  │  ├── Create document summaries                                      │   │
-│  │  └── Store metadata to AGENT_STATE.DOC_METADATA                     │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  ├── LLM: Summarization                                             │   │
-│  │  ├── LLM: Keyword extraction                                        │   │
-│  │  └── LLM: Relationship detection                                    │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Sub-State 5: LOAD_CHUNKS                                                   │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: chunk_loader                                                 │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Create chunk table with full schema                            │   │
-│  │  ├── Create metadata table                                          │   │
-│  │  ├── Load all chunks with relationships                             │   │
-│  │  ├── Verify chunk coverage (no missing content)                     │   │
-│  │  └── Store table refs to AGENT_STATE.CHUNK_TABLES                   │   │
-│  │  Cortex Calls: None (data operation)                                 │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+When a user's request spans multiple business functions, the orchestrator composes skills
+using predefined patterns. Patterns are guides, not rigid scripts -- the orchestrator adapts
+them to the user's actual request.
+
+| Pattern | Skill Chain |
+|---------|-------------|
+| **Imaging + Clinical Integration** | DICOM parse -> FHIR ingest -> Clinical NLP -> PubMed enrichment -> UI |
+| **Clinical Data Warehouse (OMOP)** | FHIR ingest -> OMOP CDM transform -> HIPAA governance -> Semantic views |
+| **Drug Safety Signal Detection** | FAERS analysis -> PubMed literature -> Clinical NLP -> Claims correlation |
+| **Genomics + Clinical Outcomes** | nf-core pipeline -> Variant annotation -> Survival analysis -> ML models |
+| **Single-Cell Analysis Pipeline** | scRNA-seq QC -> scvi-tools integration -> ML Registry |
+| **Real-World Evidence Study** | Claims cohort -> ClinicalTrials.gov -> OMOP -> Survival -> PubMed validation |
+| **Clinical Trial Design** | Problem validation -> Trial search -> Literature -> Protocol -> Power analysis |
+| **Lab Data Modernization** | Allotrope conversion -> Dynamic Tables -> Analytics dashboard |
+| **Clinical Data Application (React)** | Domain skills -> React/Next.js app -> SPCS deployment -> PHI masking |
+| **Clinical Document Intelligence** | Clinical docs extraction -> NLP enrichment -> PubMed -> FHIR -> Governance -> Semantic views |
+
+### Adapting Patterns
+
+- Skip steps that don't apply
+- Reorder when the user already has intermediate outputs
+- Combine patterns when the request spans multiple
+- Add steps for capabilities not in the pattern (e.g., governance)
+- Always ask if the adaptation is unclear
 
 ---
 
-### Sub-Agent Architecture: ML Model Builder (Deep Dive)
+## Defense-in-Depth: Guardrail Architecture
+
+### Three-Layer Guardrail System
+
+Complex skills (e.g., clinical-docs) enforce a three-layer guardrail system:
+
+| Layer | Mechanism | Purpose |
+|-------|-----------|---------|
+| 1 | `AGENTS.md` (profile-level rules) | Session-wide constraints |
+| 2 | Gate micro-skills + Phase skills | Structural decomposition -- model cannot skip steps |
+| 3 | `hooks.json` | Hard blocks on DDL/DML without user confirmation |
+
+### Gate and Phase Pattern
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      ML MODEL BUILDER AGENT                                 │
-│                                                                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Sub-State 1: TASK_CLASSIFICATION                                           │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: task_classifier                                              │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Analyze use case description                                   │   │
-│  │  ├── Examine available data characteristics                         │   │
-│  │  ├── Determine ML task type:                                        │   │
-│  │  │   ├── Binary Classification                                      │   │
-│  │  │   ├── Multi-class Classification                                 │   │
-│  │  │   ├── Regression                                                 │   │
-│  │  │   ├── Anomaly Detection                                          │   │
-│  │  │   ├── Time Series Forecasting                                    │   │
-│  │  │   └── Clustering                                                 │   │
-│  │  ├── Identify target variable                                       │   │
-│  │  └── Store task definition to AGENT_STATE.ML_TASK                   │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  ├── LLM: Use case → ML task mapping                                │   │
-│  │  └── LLM: Target variable identification                            │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Sub-State 2: FEATURE_SELECTION                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: feature_selector                                             │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Analyze available columns from curated data                    │   │
-│  │  ├── Query feature store for pre-built features                     │   │
-│  │  ├── Recommend additional feature engineering                       │   │
-│  │  ├── Handle categorical encoding strategy                           │   │
-│  │  ├── Address missing value strategy                                 │   │
-│  │  └── Store feature set to AGENT_STATE.FEATURE_SET                   │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  ├── LLM: Feature importance reasoning                              │   │
-│  │  └── LLM: Feature engineering suggestions                           │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Sub-State 3: TRAINING                                                      │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: model_trainer                                                │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Generate training notebook code                                │   │
-│  │  ├── Execute training in Snowflake (Snowpark ML)                    │   │
-│  │  ├── Perform train/test split                                       │   │
-│  │  ├── Apply hyperparameter tuning                                    │   │
-│  │  ├── Track experiment metrics                                       │   │
-│  │  └── Store model artifact to AGENT_STATE.TRAINED_MODEL              │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Generate training code                                    │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Sub-State 4: EVALUATION                                                    │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: evaluator                                                    │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Calculate task-appropriate metrics                             │   │
-│  │  │   ├── Classification: accuracy, precision, recall, F1, AUC       │   │
-│  │  │   ├── Regression: MAE, RMSE, R²                                  │   │
-│  │  │   └── Anomaly: precision@k, recall@k                             │   │
-│  │  ├── Generate confusion matrix / residual plots                     │   │
-│  │  ├── Compare against baseline                                       │   │
-│  │  ├── Determine if model meets quality threshold                     │   │
-│  │  └── Store evaluation to AGENT_STATE.MODEL_EVALUATION               │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Generate evaluation narrative                             │   │
-│  │  On Failure:                                                         │   │
-│  │  └── Route back to FEATURE_SELECTION with recommendations           │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Sub-State 5: REGISTRATION                                                  │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: registry_agent                                               │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Log model to Snowflake ML Registry                             │   │
-│  │  ├── Set version and tags                                           │   │
-│  │  ├── Create inference UDF                                           │   │
-│  │  ├── Generate model card documentation                              │   │
-│  │  └── Store registry ref to AGENT_STATE.REGISTERED_MODEL             │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Generate model documentation                              │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Sub-State 6: EXPLAINABILITY                                                │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: explainability_agent                                         │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Calculate SHAP values                                          │   │
-│  │  ├── Generate feature importance rankings                           │   │
-│  │  ├── Create partial dependence plots                                │   │
-│  │  ├── Generate natural language explanations                         │   │
-│  │  └── Store explanations to AGENT_STATE.MODEL_EXPLANATIONS           │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Translate SHAP values to business language                │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
++-- Tier 1: Gates (Pre-conditions) ---------+
+|                                            |
+|  confirm-environment                       |
+|    Validate connection, db, schema, wh     |
+|                                            |
+|  confirm-doc-types                         |
+|    Discover and confirm document types      |
+|                                            |
+|  confirm-pipeline-config                   |
+|    Review and approve extraction config     |
+|                                            |
++-- Tier 2: Phases (Execution) -------------+
+|                                            |
+|  parse-and-refresh                         |
+|    AI_PARSE_DOCUMENT + dynamic objects      |
+|                                            |
+|  classify                                  |
+|    AI_COMPLETE-based document classification|
+|                                            |
+|  extract                                   |
+|    AI_EXTRACT type-specific field extraction|
+|                                            |
++--------------------------------------------+
 ```
+
+### HIPAA Guardrails (Always Enforced)
+
+- Always apply HIPAA governance before exposing any patient data
+- Never store or display PHI without masking policies in place
+- Always use `IS_ROLE_IN_SESSION()` (not `CURRENT_ROLE()`) in masking/row-access policies
+- Always recommend audit trails via `ACCESS_HISTORY` for PHI-containing tables
+- Prefer de-identified datasets for analytics and ML training
+- Always validate FHIR/HL7/OMOP data quality before building downstream tables
+- For genomic data: ensure proper consent tracking and data use agreements
+- For FAERS/pharmacovigilance: note limitations of spontaneous reporting data
+
+### Anti-Patterns
+
+- Do NOT use clinical-nlp on raw files (PDF, DOCX, images) -- use clinical-docs first
+- Do NOT use survival-analysis without a defined cohort -- build the cohort first
+- Do NOT invoke CKEs for non-evidence tasks (pipeline construction, SQL generation)
+- Do NOT skip preflight checks -- they run automatically
+- Do NOT force-follow a pattern when the request only partially matches -- adapt it
+- Do NOT use imaging-dicom-parser (standalone) for full imaging workflows -- use the router
+- Do NOT bypass the plan gate for multi-step pipelines or patient data workflows
 
 ---
 
-### Validation Agent (Sophisticated Checks)
+## Shared Infrastructure
+
+### Preflight Checker
+
+Skills use a shared preflight checker to verify Snowflake dependencies before execution:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      VALIDATION AGENT                                       │
-│                                                                             │
-│  Triggered: After each major phase (preprocessing, ML, etc.)                │
-│  Purpose: Ensure quality gates are met before proceeding                    │
-│                                                                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Check Suite 1: DATA COMPLETENESS                                           │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  ├── Expected row counts vs actual loaded                           │   │
-│  │  ├── All input files successfully processed                         │   │
-│  │  ├── Date range coverage matches expectations                       │   │
-│  │  ├── All expected entities/categories present                       │   │
-│  │  └── No truncation or data loss                                     │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Analyze completeness gaps and recommend fixes             │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  Check Suite 2: SCHEMA CONSISTENCY                                          │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  ├── All expected columns present in output                         │   │
-│  │  ├── Data types match specifications                                │   │
-│  │  ├── Column names follow conventions                                │   │
-│  │  ├── Cross-table schema alignment                                   │   │
-│  │  └── Foreign key relationships valid                                │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Identify schema mismatches and suggest corrections        │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  Check Suite 3: DATA QUALITY                                                │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  ├── Null percentages within acceptable thresholds                  │   │
-│  │  ├── No duplicate primary keys                                      │   │
-│  │  ├── Values within expected ranges                                  │   │
-│  │  ├── Categorical values in allowed sets                             │   │
-│  │  ├── Temporal ordering preserved                                    │   │
-│  │  └── No orphaned records                                            │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Prioritize quality issues by business impact              │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  Check Suite 4: SEMANTIC VALIDATION                                         │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  ├── Does processed data support the use case?                      │   │
-│  │  ├── Are required entities/concepts captured?                       │   │
-│  │  ├── Can the user's questions be answered?                          │   │
-│  │  ├── Are relationships between data preserved?                      │   │
-│  │  └── Does semantic meaning match expectations?                      │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  ├── LLM: Use case vs data alignment analysis                       │   │
-│  │  └── LLM: Sample question answering test                            │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  Check Suite 5: ML-SPECIFIC VALIDATION                                      │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  ├── Model metrics meet minimum thresholds                          │   │
-│  │  ├── No data leakage detected                                       │   │
-│  │  ├── Feature distributions stable                                   │   │
-│  │  ├── Inference latency acceptable                                   │   │
-│  │  └── Model explanations make sense                                  │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Evaluate model explanation quality                        │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  Failure Handling:                                                          │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  1. Classify error type (data, schema, quality, semantic)           │   │
-│  │  2. Determine severity (blocking, warning, info)                    │   │
-│  │  3. Check if auto-recoverable                                       │   │
-│  │  4. Generate fix instructions for upstream agent                    │   │
-│  │  5. Route back to appropriate phase with full context               │   │
-│  │  6. Track retry count against max_retries                           │   │
-│  │  7. Escalate to Meta-Agent if unrecoverable                         │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Generate remediation plan                                 │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+shared/preflight/
++-- checker.py     # PreflightChecker class
++-- configs.py     # Dependency configurations
++-- __init__.py
 ```
+
+The checker supports:
+- Snowflake tables (`add_table`)
+- Cortex Search services (`add_cortex_search`)
+- Marketplace listings (`add_marketplace_listing`)
+
+Each dependency has: `name`, `probe_sql`, `setup_instructions`, `fallback`, `required`.
+
+Status values: `READY` | `MISSING` | `ERROR` | `SKIPPED`
+
+### Generation Pipeline
+
+```
+1. Edit YAML registry  (templates/skills_incubator.yaml)
+2. Edit Jinja2 template (templates/orchestrator.md.j2)   -- structural changes only
+3. Run: python scripts/generate_orchestrators.py --profile incubator
+4. Script loads YAML, builds SkillObj instances, groups by domain, renders template
+5. Output: agents/health-sciences-incubator.md
+6. If --profile both: drift check between incubator and production
+```
+
+### QA Validation (12-Check Suite)
+
+```bash
+python scripts/qa_validate_orchestrator.py
+```
+
+| Check | What It Validates |
+|-------|-------------------|
+| 1. $refs -> SKILL.md name | Every $ref in orchestrator points to a SKILL.md with matching name |
+| 2. SKILL.md -> orchestrator ref | Every top-level SKILL.md is referenced in the orchestrator |
+| 3. Folder name == SKILL.md name | Directory name matches the name: field in SKILL.md frontmatter |
+| 4. Imaging sub-skills | All imaging sub-skill directories exist and are referenced |
+| 5. Taxonomy tree entries | Skills in the taxonomy tree exist in the filesystem |
+| 6. Reference consistency | Counts $ref occurrences per skill |
+| 7. Standalone skills | Standalone skills exist and are referenced |
+| 8. Twin drift | Structural differences between incubator and production orchestrators |
+| 9. Registry bidirectional | Every registry entry has a directory and vice versa |
+| 10. Platform affinities | All SKILL.md files have valid platform_affinities frontmatter |
+| 11. CKE used_by | CKE used_by references point to real skills |
+| 12. Overlap entries | Overlap skills exist and are referenced in orchestrator |
 
 ---
 
-### App Code Generation (Generated, Not Templated)
+## Observability and Audit
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      APP CODE GENERATOR AGENT                               │
-│                                                                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Sub-State 1: APP_SPEC_GENERATION                                           │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: spec_generator                                               │   │
-│  │  Input:                                                              │   │
-│  │  ├── Use case description                                           │   │
-│  │  ├── Created Snowflake tables                                       │   │
-│  │  ├── Cortex Search service                                          │   │
-│  │  ├── Semantic model                                                 │   │
-│  │  ├── Registered ML models                                           │   │
-│  │  Output:                                                             │   │
-│  │  └── Detailed App Specification (see below)                         │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Generate comprehensive app spec from requirements         │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  Generated App Spec Example:                                                │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  app:                                                                │   │
-│  │    name: "Equipment Failure Analyzer"                                │   │
-│  │    description: "AI-powered equipment monitoring and failure        │   │
-│  │                  prediction with historical incident search"         │   │
-│  │                                                                      │   │
-│  │    pages:                                                            │   │
-│  │      - name: "Dashboard"                                             │   │
-│  │        route: "/"                                                    │   │
-│  │        layout: "grid"                                                │   │
-│  │        components:                                                   │   │
-│  │          - type: "metric_card_group"                                 │   │
-│  │            source: "sensor_summary"                                  │   │
-│  │            metrics:                                                  │   │
-│  │              - column: "avg_temperature"                             │   │
-│  │                label: "Avg Temperature"                              │   │
-│  │                format: "number"                                      │   │
-│  │                trend: true                                           │   │
-│  │              - column: "max_pressure"                                │   │
-│  │                label: "Max Pressure"                                 │   │
-│  │                format: "number"                                      │   │
-│  │                alert_threshold: 150                                  │   │
-│  │          - type: "time_series_chart"                                 │   │
-│  │            source: "sensor_readings"                                 │   │
-│  │            x_axis: "timestamp"                                       │   │
-│  │            y_axis: ["temperature", "pressure", "vibration"]          │   │
-│  │            interactive: true                                         │   │
-│  │          - type: "anomaly_indicator"                                 │   │
-│  │            model: "anomaly_detector"                                 │   │
-│  │            refresh_interval: 60                                      │   │
-│  │                                                                      │   │
-│  │      - name: "Chat"                                                  │   │
-│  │        route: "/chat"                                                │   │
-│  │        components:                                                   │   │
-│  │          - type: "chat_interface"                                    │   │
-│  │            agent: "equipment_agent"                                  │   │
-│  │            tools:                                                    │   │
-│  │              - cortex_search: "document_index"                       │   │
-│  │              - cortex_analyst: "sensor_semantic_model"               │   │
-│  │              - model_inference: "anomaly_detector"                   │   │
-│  │            suggested_questions:                                      │   │
-│  │              - "What equipment failures occurred last month?"        │   │
-│  │              - "Show me temperature trends for Unit A"               │   │
-│  │              - "Predict failure risk for current readings"           │   │
-│  │                                                                      │   │
-│  │      - name: "Predictions"                                           │   │
-│  │        route: "/predictions"                                         │   │
-│  │        components:                                                   │   │
-│  │          - type: "model_inference_panel"                             │   │
-│  │            model: "anomaly_detector"                                 │   │
-│  │            input_form:                                               │   │
-│  │              - field: "temperature"                                  │   │
-│  │                type: "number"                                        │   │
-│  │                default: "auto_from_latest"                           │   │
-│  │              - field: "pressure"                                     │   │
-│  │                type: "number"                                        │   │
-│  │              - field: "vibration"                                    │   │
-│  │                type: "number"                                        │   │
-│  │            show_explanation: true                                    │   │
-│  │                                                                      │   │
-│  │      - name: "Search"                                                │   │
-│  │        route: "/search"                                              │   │
-│  │        components:                                                   │   │
-│  │          - type: "document_search"                                   │   │
-│  │            service: "document_index"                                 │   │
-│  │            result_display: "card"                                    │   │
-│  │            highlight_matches: true                                   │   │
-│  │                                                                      │   │
-│  │      - name: "Improvements"                                          │   │
-│  │        route: "/improve"                                             │   │
-│  │        components:                                                   │   │
-│  │          - type: "feedback_interface"                                │   │
-│  │            description: "Request app improvements"                   │   │
-│  │            handler: "improvement_agent"                              │   │
-│  │                                                                      │   │
-│  │    api:                                                              │   │
-│  │      endpoints:                                                      │   │
-│  │        - path: "/api/chat"                                           │   │
-│  │          method: "POST"                                              │   │
-│  │          handler: "cortex_agent_invoke"                              │   │
-│  │        - path: "/api/metrics"                                        │   │
-│  │          method: "GET"                                               │   │
-│  │          handler: "sql_query"                                        │   │
-│  │          query_source: "sensor_summary"                              │   │
-│  │        - path: "/api/predict"                                        │   │
-│  │          method: "POST"                                              │   │
-│  │          handler: "model_inference"                                  │   │
-│  │          model: "anomaly_detector"                                   │   │
-│  │        - path: "/api/search"                                         │   │
-│  │          method: "POST"                                              │   │
-│  │          handler: "cortex_search"                                    │   │
-│  │          service: "document_index"                                   │   │
-│  │        - path: "/api/improve"                                        │   │
-│  │          method: "POST"                                              │   │
-│  │          handler: "improvement_request"                              │   │
-│  │                                                                      │   │
-│  │    deployment:                                                       │   │
-│  │      platform: "spcs"                                                │   │
-│  │      container: "single"                                             │   │
-│  │      auth: "oauth"                                                   │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  Sub-State 2: REACT_CODE_GENERATION                                         │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: react_generator                                              │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Generate App.tsx with routing                                  │   │
-│  │  ├── Generate page components for each page spec                    │   │
-│  │  ├── Generate reusable UI components                                │   │
-│  │  ├── Generate hooks for data fetching                               │   │
-│  │  ├── Generate stores for state management                           │   │
-│  │  ├── Generate Tailwind styles                                       │   │
-│  │  └── Generate package.json and configs                              │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Generate each component from spec                         │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  Sub-State 3: FASTAPI_CODE_GENERATION                                       │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: fastapi_generator                                            │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Generate main.py with FastAPI app                              │   │
-│  │  ├── Generate route handlers for each endpoint                      │   │
-│  │  ├── Generate Snowflake service layer                               │   │
-│  │  ├── Generate Cortex integration code                               │   │
-│  │  ├── Generate Pydantic models                                       │   │
-│  │  └── Generate requirements.txt                                      │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Generate each endpoint from spec                          │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  Sub-State 4: DEPLOYMENT_CONFIG_GENERATION                                  │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: config_generator                                             │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Generate Dockerfile                                            │   │
-│  │  ├── Generate nginx.conf                                            │   │
-│  │  ├── Generate supervisord.conf                                      │   │
-│  │  ├── Generate service_spec.yaml for SPCS                            │   │
-│  │  └── Generate deploy.sh script                                      │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  └── LLM: Generate configs appropriate for spec                     │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  Sub-State 5: TEST_AND_VALIDATE                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Agent: test_agent                                                   │   │
-│  │  Actions:                                                            │   │
-│  │  ├── Syntax check all generated code                                │   │
-│  │  ├── Type check TypeScript                                          │   │
-│  │  ├── Validate Python with pylint/mypy                               │   │
-│  │  ├── Execute in sandbox environment (Snowflake container)           │   │
-│  │  ├── Run integration tests against Snowflake                        │   │
-│  │  └── Verify all endpoints respond correctly                         │   │
-│  │  Cortex Calls:                                                       │   │
-│  │  ├── LLM: Code review for issues                                    │   │
-│  │  └── LLM: Generate fixes for detected issues                        │   │
-│  │  On Failure:                                                         │   │
-│  │  └── Route back to appropriate generator with error context         │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+### Execution Logging
 
----
-
-## State Management & Persistence
-
-### Snowflake Tables for Agent State
-
-All agent state is persisted in Snowflake for durability, observability, and resumability.
+Each orchestrator session produces artifacts that can be logged to Snowflake tables for
+auditability -- critical in healthcare where regulatory compliance demands traceability.
 
 ```sql
--- Execution Plans
-CREATE TABLE AGENT_EXECUTION_PLANS (
-    plan_id STRING PRIMARY KEY,
-    use_case_description TEXT,
-    raw_data_paths ARRAY,
-    execution_plan VARIANT,
-    app_requirements VARIANT,
-    status STRING,  -- pending, running, completed, failed
-    created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
-    updated_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+CREATE TABLE IF NOT EXISTS ORCHESTRATOR_EXECUTION_LOG (
+    session_id STRING,
+    plan_id STRING,
+    user_request TEXT,
+    detected_domain STRING,
+    plan_steps VARIANT,
+    plan_approved BOOLEAN,
+    started_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    completed_at TIMESTAMP_NTZ,
+    status STRING
 );
 
--- Phase Execution State
-CREATE TABLE AGENT_PHASE_STATE (
-    phase_id STRING PRIMARY KEY,
-    plan_id STRING REFERENCES AGENT_EXECUTION_PLANS(plan_id),
-    phase_name STRING,
-    agents ARRAY,
-    status STRING,  -- pending, running, completed, failed, retrying
-    retry_count NUMBER DEFAULT 0,
+CREATE TABLE IF NOT EXISTS SKILL_EXECUTION_LOG (
+    session_id STRING,
+    step_number NUMBER,
+    skill_name STRING,
+    skill_type STRING,
+    input_context VARIANT,
+    artifacts_produced VARIANT,
+    governance_applied VARIANT,
+    preflight_status STRING,
     started_at TIMESTAMP_NTZ,
     completed_at TIMESTAMP_NTZ,
-    error_message TEXT,
-    CONSTRAINT fk_plan FOREIGN KEY (plan_id) REFERENCES AGENT_EXECUTION_PLANS(plan_id)
-);
-
--- Agent Execution State (Sub-Agent Level)
-CREATE TABLE AGENT_EXECUTION_STATE (
-    execution_id STRING PRIMARY KEY,
-    phase_id STRING REFERENCES AGENT_PHASE_STATE(phase_id),
-    agent_id STRING,
-    sub_state STRING,
-    input_data VARIANT,
-    output_data VARIANT,
     status STRING,
-    cortex_calls ARRAY,  -- Track all Cortex LLM/Search/Analyst calls
-    started_at TIMESTAMP_NTZ,
-    completed_at TIMESTAMP_NTZ,
     error_message TEXT
 );
 
--- LangGraph Checkpoints (for resumability)
-CREATE TABLE LANGGRAPH_CHECKPOINTS (
-    checkpoint_id STRING PRIMARY KEY,
-    plan_id STRING,
-    thread_id STRING,
-    checkpoint_ns STRING,
-    channel_values VARIANT,
-    channel_versions VARIANT,
-    created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
-);
-
--- Generated Artifacts
-CREATE TABLE AGENT_ARTIFACTS (
-    artifact_id STRING PRIMARY KEY,
-    plan_id STRING,
-    artifact_type STRING,  -- table, search_service, model, code, config
-    artifact_name STRING,
-    artifact_location STRING,
-    metadata VARIANT,
-    created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
-);
-
--- Cortex Call Logs (Observability)
-CREATE TABLE CORTEX_CALL_LOGS (
-    call_id STRING PRIMARY KEY,
-    execution_id STRING,
-    call_type STRING,  -- llm, search, analyst, agent
-    model STRING,
-    input_tokens NUMBER,
-    output_tokens NUMBER,
-    latency_ms NUMBER,
-    request_payload VARIANT,
-    response_payload VARIANT,
-    created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+CREATE TABLE IF NOT EXISTS GOVERNANCE_AUDIT_LOG (
+    session_id STRING,
+    skill_name STRING,
+    governance_action STRING,
+    target_object STRING,
+    policy_type STRING,
+    policy_definition VARIANT,
+    applied_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
 );
 ```
 
----
+### What Gets Logged
 
-## Agent Communication
-
-### Recommended: Shared State Object + Message Passing Hybrid
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      AGENT COMMUNICATION MODEL                              │
-│                                                                             │
-│  Layer 1: Shared State (Snowflake Tables)                                   │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  ├── AGENT_EXECUTION_STATE: Current state of each agent             │   │
-│  │  ├── AGENT_ARTIFACTS: Created resources (tables, models, etc.)      │   │
-│  │  └── LANGGRAPH_CHECKPOINTS: LangGraph state for resumability        │   │
-│  │                                                                      │   │
-│  │  Usage:                                                              │   │
-│  │  - Agents read inputs from previous agent's output_data             │   │
-│  │  - Agents write results to their own output_data                    │   │
-│  │  - Artifacts table tracks all created resources                     │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  Layer 2: Message Passing (LangGraph Channels)                              │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  ├── Control messages: "proceed", "retry", "abort"                  │   │
-│  │  ├── Error messages: Structured error context for retry             │   │
-│  │  └── Progress messages: Status updates for observability            │   │
-│  │                                                                      │   │
-│  │  Usage:                                                              │   │
-│  │  - Validation Agent sends "retry" message with fix instructions     │   │
-│  │  - Meta-Agent sends "proceed" when gates pass                       │   │
-│  │  - All agents emit progress for real-time monitoring                │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  Layer 3: Artifact References                                               │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Instead of passing data, agents pass references:                   │   │
-│  │  ├── Table reference: "CURATED.SENSOR_DATA"                         │   │
-│  │  ├── Search service: "DDR_SEARCH_SERVICE"                           │   │
-│  │  ├── Model reference: "ANOMALY_DETECTOR_V1"                         │   │
-│  │  └── File reference: "@STAGE/generated_code/"                       │   │
-│  │                                                                      │   │
-│  │  Benefits:                                                           │   │
-│  │  - No large data transfers between agents                           │   │
-│  │  - Resources persist independently of agent state                   │   │
-│  │  - Easy to inspect intermediate results                             │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## App Improvement Loop
-
-### User-Initiated Refinement
-
-The generated app includes an "Improvements" page where users can request changes:
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      IMPROVEMENT WORKFLOW                                   │
-│                                                                             │
-│  Step 1: User Request                                                       │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  User: "Add a page that shows equipment by location on a map"       │   │
-│  │                                                                      │   │
-│  │  OR                                                                  │   │
-│  │                                                                      │   │
-│  │  User: "The predictions are not accurate enough. Can you retrain    │   │
-│  │         the model with more recent data?"                            │   │
-│  │                                                                      │   │
-│  │  OR                                                                  │   │
-│  │                                                                      │   │
-│  │  User: "Add a new data source: maintenance_logs.csv"                │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Step 2: Improvement Agent Analyzes Request                                 │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Cortex LLM classifies the request type:                            │   │
-│  │  ├── UI_CHANGE: New page, component, or visual change              │   │
-│  │  ├── DATA_CHANGE: New data source, schema change                    │   │
-│  │  ├── ML_CHANGE: Model retraining, new model                        │   │
-│  │  ├── INTEGRATION_CHANGE: New Cortex service, API endpoint          │   │
-│  │  └── BUG_FIX: Something not working correctly                       │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Step 3: Generate Improvement Plan                                          │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Improvement Agent creates a targeted execution plan:               │   │
-│  │  ├── Identifies affected phases                                     │   │
-│  │  ├── Determines which agents need to re-run                         │   │
-│  │  ├── Preserves unchanged artifacts                                  │   │
-│  │  └── Creates incremental update plan                                │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Step 4: Execute Improvement                                                │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  ├── For UI_CHANGE: Re-run App Code Generator with updated spec    │   │
-│  │  ├── For DATA_CHANGE: Re-run Discovery → Preprocessing → Validation│   │
-│  │  ├── For ML_CHANGE: Re-run Feature Engineering → ML Training       │   │
-│  │  └── For all: Re-deploy to SPCS                                    │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                              │                                              │
-│                              ▼                                              │
-│  Step 5: Notify User                                                        │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  "Your app has been updated! Here's what changed:                   │   │
-│  │   - Added new 'Equipment Map' page                                  │   │
-│  │   - Integrated location data from maintenance_logs                  │   │
-│  │   - Updated 3 API endpoints                                         │   │
-│  │                                                                      │   │
-│  │   Click here to see the changes: [View Changelog]"                  │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+| Component | Captured Data |
+|-----------|---------------|
+| Orchestrator plan | User request, detected domain, generated plan, approval status |
+| Skill execution | Skill name, artifacts produced, governance applied, preflight status |
+| CKE invocations | Query text, result count, source (PubMed/ClinicalTrials), latency |
+| Governance actions | Policy type, target table, role-based access rules applied |
+| Platform skill usage | Which platform skills were triggered by affinities |
 
 ---
 
 ## Technology Stack
 
-| Layer | Technology | Snowflake Service |
-|-------|------------|-------------------|
-| Orchestration | LangGraph | — |
-| LLM | langchain-snowflake | Cortex LLM (Claude, Mistral, Llama) |
-| Semantic Queries | Cortex Analyst | Cortex Analyst |
-| Document Search | Cortex Search | Cortex Search |
-| Agent Orchestration | Cortex Agent | Cortex Agent |
-| State Persistence | Snowflake Tables | Snowflake |
-| Checkpointing | LangGraph + Snowflake | Snowflake Tables |
-| ML Training | Snowpark ML | Snowflake |
-| ML Registry | ML Registry | Snowflake ML Registry |
-| Feature Store | Feature Store | Snowflake Feature Store |
-| Compute | Snowpark | Snowflake |
-| App Hosting | SPCS | Snowpark Container Services |
-| Observability | LangSmith + Snowflake | Cortex Call Logs |
+| Layer | Technology | Role |
+|-------|------------|------|
+| **Runtime** | Cortex Code (CoCo) | IDE and agent execution environment |
+| **Orchestration** | Generated Markdown system prompt | Intent detection, routing, skill composition |
+| **Industry Skills** | SKILL.md + Python scripts + references | Domain expertise as composable building blocks |
+| **Platform Skills** | CoCo bundled skills | Dynamic Tables, Governance, Streamlit, SPCS, ML, dbt, Cortex AI/Agent/Search |
+| **Knowledge** | Cortex Search Services | RAG over PubMed, ClinicalTrials.gov, data models |
+| **LLM** | Snowflake Cortex LLM | Code generation, entity extraction, classification, summarization |
+| **Search** | Cortex Search | Document retrieval, CKE queries, data model knowledge |
+| **Semantic Queries** | Cortex Analyst + Semantic Views | Natural language queries over curated tables |
+| **Agent Orchestration** | Cortex Agent | Conversational agents combining Search + Analyst + ML |
+| **ML** | Snowpark ML + Registry | Model training, versioning, inference functions |
+| **App Hosting** | SPCS or Streamlit in Snowflake | React/FastAPI containers or native Streamlit apps |
+| **Governance** | Masking Policies, Row-Access Policies, ACCESS_HISTORY | HIPAA compliance |
+| **Generation** | YAML + Jinja2 + Python | Orchestrator generation pipeline |
+| **Validation** | 12-check QA suite | Orchestrator integrity verification |
+
+---
+
+## Skill Development Lifecycle
+
+```
+Phase 0: Setup         Phase 1: Incubate     Phase 2: Harden        Phase 3: Publish
+Tiger Team             Anyone (SE/SA/field)   Tiger Team only        Tiger Team
+                       |                      |                      |
+Create repo,     -->   Branch, create,   -->  Audit, test,      --> Publish to
+guidelines,            test, iterate          promote: draft >       Snowflake registry
+profile, orchestrator  on skills              review > staging >
+                                              production
+
+                                                                     Phase 4: Consume
+                                                                     Field teams
+                                                                     |
+                                                                     cortex profile add
+                                                                     health-sciences-solutions
+```
+
+### Two-Repo Model
+
+```
+coco-healthcare-skills (incubator)       cortex-code-skills (production)
+  - All skills, experimental + mature      - Graduated skills only
+  - Skills land via PR to main             - Skills land via Tiger Team review
+  - Milestone tagging (m1-imaging, etc.)   - Semantic versioning (v1.0.0)
+```
+
+### Adding a New Skill
+
+1. Create `skills/hcls-{sub}-{func}-{skill}/` directory
+2. Add `SKILL.md` with proper frontmatter (`name`, `description`, `tools`, `platform_affinities`)
+3. Register in `templates/skills_incubator.yaml` (triggers, description, domain)
+4. Regenerate: `python scripts/generate_orchestrators.py --profile incubator`
+5. Verify with: `python scripts/qa_validate_orchestrator.py`
+6. Commit skill directory + registry update + regenerated orchestrator
+
+### Milestone Tagging
+
+The incubator uses lightweight git tags (not semver):
+
+```
+m{sequence}-{scope}-{optional-context}
+```
+
+| Tag | Meaning |
+|-----|---------|
+| `m1-imaging` | First stable milestone: imaging skills working end-to-end |
+| `m2-imaging-genomics` | Added genomics skills on top of m1 |
+| `m3-rwe-demo` | Stable point for a specific RWE customer demo |
+| `m4-full-skills` | All skills reorganized and QA-validated |
+| `m5-pre-sfs-batch1` | Snapshot before first batch submitted to SFS |
 
 ---
 
 ## Cortex Service Utilization
 
-### Maximizing Snowflake Cortex
+Every step in the platform leverages Snowflake Cortex services:
 
-Every step leverages Cortex services:
+| Workflow Phase | Cortex Services Used |
+|----------------|---------------------|
+| **Orchestrator Planning** | CoCo LLM (intent detection), skill routing tables (keyword matching) |
+| **Data Ingestion** | Cortex AI Functions (AI_PARSE_DOCUMENT for PDFs/images) |
+| **Document Processing** | Cortex AI (AI_EXTRACT, AI_COMPLETE, AI_AGG for classification/extraction) |
+| **Clinical NLP** | Cortex LLM (entity extraction, ICD coding, medication parsing) |
+| **Search Indexing** | Cortex Search (service creation over documents, DICOM metadata, CKEs) |
+| **Semantic Modeling** | Cortex Analyst (semantic view generation for natural language queries) |
+| **ML Training** | Snowpark ML (model training), ML Registry (model versioning) |
+| **Agent Creation** | Cortex Agent (wiring Search + Analyst + ML inference tools) |
+| **Evidence Grounding** | Cortex Search (CKE queries over PubMed, ClinicalTrials.gov) |
+| **Governance** | Masking Policies, Row-Access Policies, ACCESS_HISTORY audit |
+| **App Generation** | CoCo LLM (Streamlit/React code generation via platform skills) |
+| **Deployment** | SPCS (container deployment), Streamlit in Snowflake (native apps) |
 
-| Phase | Cortex Services Used |
-|-------|---------------------|
-| **Meta-Agent Planning** | Cortex LLM (use case analysis), Cortex Search (agent registry) |
-| **Discovery** | Cortex LLM (file type classification, schema analysis) |
-| **Preprocessing** | Cortex LLM (data quality narratives, transformation SQL) |
-| **Validation** | Cortex LLM (error classification, remediation plans) |
-| **Feature Engineering** | Cortex LLM (feature suggestions), Cortex Analyst (data exploration) |
-| **ML Training** | Cortex LLM (code generation, model documentation) |
-| **Search Indexing** | Cortex Search (service creation) |
-| **Semantic Model** | Cortex Analyst (model generation) |
-| **App Generation** | Cortex LLM (code generation), Cortex Agent (app agent creation) |
-| **Deployment** | — (infrastructure only) |
-| **Runtime App** | Cortex Agent, Cortex Search, Cortex Analyst, Cortex LLM |
+---
+
+## Repository Structure
+
+```
+snowflake-agentic-platform/
++-- docs/
+|   +-- ARCHITECTURE.md                # This document
+|   +-- EXECUTIVE_VISION.md            # Executive summary and vision
+|   +-- DEVOPS.md                      # CI/CD, testing, observability
+|
++-- coco-healthcare-skills/            # Industry skills repository
+    +-- agents/                        # Generated orchestrator agents
+    |   +-- health-sciences-incubator.md
+    |   +-- health-sciences-solutions.md
+    +-- skills/                        # Flat skill directories
+    |   +-- hcls-provider-imaging/
+    |   +-- hcls-provider-imaging-dicom-parser/
+    |   +-- hcls-provider-cdata-fhir/
+    |   +-- hcls-provider-cdata-clinical-nlp/
+    |   +-- hcls-provider-cdata-omop/
+    |   +-- hcls-provider-cdata-clinical-docs/
+    |   +-- hcls-provider-claims-data-analysis/
+    |   +-- hcls-pharma-dsafety-pharmacovigilance/
+    |   +-- hcls-pharma-dsafety-clinical-trial-protocol/
+    |   +-- hcls-pharma-genomics-nextflow/
+    |   +-- hcls-pharma-genomics-variant-annotation/
+    |   +-- hcls-pharma-genomics-single-cell-qc/
+    |   +-- hcls-pharma-genomics-scvi-tools/
+    |   +-- hcls-pharma-genomics-survival-analysis/
+    |   +-- hcls-pharma-lab-allotrope/
+    |   +-- hcls-cross-research-problem-selection/
+    |   +-- hcls-cross-cke-pubmed/
+    |   +-- hcls-cross-cke-clinical-trials/
+    +-- templates/                     # Orchestrator generation templates
+    |   +-- orchestrator.md.j2
+    |   +-- skills_incubator.yaml
+    |   +-- skills_production.yaml
+    +-- shared/                        # Shared infrastructure
+    |   +-- preflight/
+    +-- scripts/                       # Generation, setup, QA scripts
+    |   +-- generate_orchestrators.py
+    |   +-- qa_validate_orchestrator.py
+    |   +-- setup_dicom_model_knowledge_repo.sql
+    +-- references/                    # Data model spreadsheets
+    +-- README.md
+```
+
+---
+
+## Evolution from Original Architecture
+
+This architecture supersedes the original LangGraph-based agent platform design. Key concepts
+were preserved and adapted:
+
+| Original Concept | Current Implementation | Notes |
+|------------------|----------------------|-------|
+| Meta-Agent (Planner) | Orchestrator system prompt | Declarative (YAML + Jinja2) vs imperative (Python) |
+| Agent Registry (Cortex Search) | `skills_incubator.yaml` + trigger routing tables | Could add Cortex Search for fuzzy matching in future |
+| Sub-agent state machines | Router skills with sub-skills | Same decomposition, simpler runtime |
+| Validation Agent (5 check suites) | Preflight checker + plan-gate protocol + defense-in-depth | Room to add data quality / semantic validation skills |
+| Agent communication (3 layers) | Platform affinities + artifact references | Declarative composition vs runtime message passing |
+| LangGraph checkpointing | CoCo session state + plan-gate re-entry | No custom checkpointing needed |
+| App Code Generator | `build-react-app` + `deploy-to-spcs` platform skills | Leverages bundled CoCo skills |
+| LangSmith observability | Execution logging tables + QA validation | Can add LangSmith if needed |
+| Self-healing retry | Preflight fallbacks + orchestrator course-correction | Skills degrade gracefully when dependencies missing |
+| Domain agnostic | Domain-specific (healthcare) with extensible framework | Trade-off: depth over breadth |
+
+### What the Framework Enables Beyond Healthcare
+
+The three-layer architecture (YAML registry + Jinja2 template + generated orchestrator) is
+industry-agnostic. To create an orchestrator for a different industry:
+
+1. Create a new YAML registry (e.g., `skills_energy.yaml`) with industry-specific skills
+2. Reuse the same Jinja2 template (routing rules, plan-gate protocol, guardrails adapt)
+3. Generate a new orchestrator (e.g., `energy-solutions.md`)
+4. Register new industry skills under `skills/`
+
+The orchestrator logic guide, generation pipeline, QA validation, and preflight infrastructure
+are all reusable across industries.
 
 ---
 
 ## Next Steps
 
-1. **Prototype Meta-Agent** — Build the planner that generates execution plans
-2. **Agent Registry** — Define capability schemas and seed initial agents
-3. **LangGraph Integration** — Set up state machine with Snowflake checkpointing
-4. **First Sub-Agent** — Implement Parquet Processor as reference
-5. **Validation Framework** — Build sophisticated check infrastructure
-6. **Code Generation POC** — Test LLM-based React/FastAPI generation
+1. **Enrich validation** -- Add a cross-cutting `hcls-cross-validation` skill implementing
+   data completeness, schema consistency, and semantic validation checks from original design
+2. **Execution logging** -- Implement the observability tables for auditability
+3. **Payer skills** -- Extend the taxonomy with Payer > Claims Processing skills
+4. **Cortex Search routing** -- Augment keyword-based routing with Cortex Search over skill
+   capabilities for fuzzy intent matching
+5. **Improvement loop** -- Formalize an `hcls-cross-improvement` skill that re-invokes the
+   orchestrator with delta requests against existing artifacts
+6. **Multi-industry expansion** -- Apply the framework to Energy, Financial Services, or
+   other verticals using the same three-layer pattern
 
 ---
 
-*Document Version: 1.0*
+*Document Version: 2.0*
 *Created: March 4, 2026*
+*Revised: March 25, 2026*
+*Supersedes: v1.0 (LangGraph-based agent platform)*

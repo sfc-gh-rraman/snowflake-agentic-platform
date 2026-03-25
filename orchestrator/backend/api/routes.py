@@ -1,4 +1,4 @@
-"""API routes for the orchestrator."""
+"""API routes for the Health Sciences Orchestrator."""
 
 import asyncio
 from typing import Any
@@ -13,12 +13,9 @@ router = APIRouter()
 
 
 class WorkflowConfig(BaseModel):
-    use_case: str | None = None
-    tables: list[str] = []
-    documents: list[str] = []
-    ml_task: str | None = None
-    output_dir: str = "/tmp/generated"
-    user_id: str = "anonymous"
+    user_request: str = "Validate FHIR data quality, apply HIPAA governance, and build analytics view"
+    database: str = "AGENTIC_PLATFORM"
+    fhir_schema: str = "FHIR_DEMO"
 
 
 class ApprovalRequest(BaseModel):
@@ -42,9 +39,12 @@ async def start_workflow(config: WorkflowConfig):
     executor = WorkflowExecutor(websocket_manager=manager)
     set_executor(executor)
 
+    from ..tasks import register_all_tasks
+    register_all_tasks(executor)
+
     asyncio.create_task(executor.run_all(config.model_dump()))
 
-    return {"status": "started", "message": "Workflow execution started"}
+    return {"status": "started", "message": "Healthcare orchestrator workflow started"}
 
 
 @router.post("/workflow/reset")
@@ -68,6 +68,10 @@ async def get_task(task_id: str):
         "progress": task.progress,
         "duration": task.duration,
         "error": task.error,
+        "skill_name": task.skill_name,
+        "skill_type": task.skill_type,
+        "preflight_status": task.preflight_status,
+        "governance": task.governance,
         "logs": [
             {"timestamp": log.timestamp, "level": log.level, "message": log.message}
             for log in task.logs
@@ -102,6 +106,7 @@ async def get_all_logs(limit: int = 100):
                         "timestamp": log.timestamp,
                         "taskId": task.id,
                         "taskName": task.name,
+                        "skillName": task.skill_name,
                         "level": log.level,
                         "message": log.message,
                     }

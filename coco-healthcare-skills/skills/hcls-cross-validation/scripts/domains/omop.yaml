@@ -1,0 +1,59 @@
+domain: omop
+tables:
+  person:
+    required_columns: [person_id, gender_concept_id, year_of_birth, race_concept_id, ethnicity_concept_id]
+    primary_key: [person_id]
+    type_expectations:
+      person_id: NUMBER
+      gender_concept_id: NUMBER
+      year_of_birth: NUMBER
+    semantic_checks:
+      - type: allowed_values
+        column: gender_concept_id
+        values: ["8507", "8532", "0"]
+
+  condition_occurrence:
+    required_columns: [condition_occurrence_id, person_id, condition_concept_id, condition_start_date]
+    primary_key: [condition_occurrence_id]
+    type_expectations:
+      condition_occurrence_id: NUMBER
+      person_id: NUMBER
+      condition_concept_id: NUMBER
+      condition_start_date: DATE
+    semantic_checks:
+      - type: referential_integrity
+        column: person_id
+        ref_table: PERSON
+        ref_column: person_id
+
+  drug_exposure:
+    required_columns: [drug_exposure_id, person_id, drug_concept_id, drug_exposure_start_date]
+    primary_key: [drug_exposure_id]
+    type_expectations:
+      drug_exposure_id: NUMBER
+      person_id: NUMBER
+      drug_concept_id: NUMBER
+    semantic_checks:
+      - type: referential_integrity
+        column: person_id
+        ref_table: PERSON
+        ref_column: person_id
+
+  measurement:
+    required_columns: [measurement_id, person_id, measurement_concept_id, measurement_date]
+    primary_key: [measurement_id]
+    type_expectations:
+      measurement_id: NUMBER
+      person_id: NUMBER
+    semantic_checks:
+      - type: referential_integrity
+        column: person_id
+        ref_table: PERSON
+        ref_column: person_id
+
+  observation_period:
+    required_columns: [observation_period_id, person_id, observation_period_start_date, observation_period_end_date]
+    primary_key: [observation_period_id]
+    type_expectations:
+      observation_period_id: NUMBER
+      person_id: NUMBER

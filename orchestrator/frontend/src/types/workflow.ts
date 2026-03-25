@@ -2,6 +2,7 @@ export interface TaskLog {
   timestamp: string;
   taskId: string;
   taskName?: string;
+  skillName?: string;
   level: 'info' | 'success' | 'error' | 'warning';
   message: string;
 }
@@ -17,6 +18,10 @@ export interface Task {
   dependencies: string[];
   logs: TaskLog[];
   artifacts: Record<string, unknown>;
+  skill_name: string | null;
+  skill_type: string | null;
+  preflight_status: string | null;
+  governance: Record<string, unknown> | null;
 }
 
 export interface Phase {
@@ -34,6 +39,8 @@ export interface WorkflowState {
   end_time: string | null;
   config: Record<string, unknown>;
   plan_id: string | null;
+  session_id: string | null;
+  detected_domain: string | null;
 }
 
 export interface WebSocketMessage {

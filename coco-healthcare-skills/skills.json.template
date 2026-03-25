@@ -1,0 +1,28 @@
+{
+  "local": [
+    {
+      "path": "<ABSOLUTE_PATH_TO_REPO>/skills",
+      "skills": [
+        { "name": "hcls-provider-imaging", "relative_path": "hcls-provider-imaging" },
+        { "name": "hcls-provider-imaging-dicom-parser", "relative_path": "hcls-provider-imaging-dicom-parser" },
+        { "name": "hcls-provider-cdata-fhir", "relative_path": "hcls-provider-cdata-fhir" },
+        { "name": "hcls-provider-cdata-clinical-nlp", "relative_path": "hcls-provider-cdata-clinical-nlp" },
+        { "name": "hcls-provider-cdata-omop", "relative_path": "hcls-provider-cdata-omop" },
+        { "name": "hcls-provider-cdata-clinical-docs", "relative_path": "hcls-provider-cdata-clinical-docs" },
+        { "name": "hcls-provider-claims-data-analysis", "relative_path": "hcls-provider-claims-data-analysis" },
+        { "name": "hcls-pharma-dsafety-pharmacovigilance", "relative_path": "hcls-pharma-dsafety-pharmacovigilance" },
+        { "name": "hcls-pharma-dsafety-clinical-trial-protocol", "relative_path": "hcls-pharma-dsafety-clinical-trial-protocol" },
+        { "name": "hcls-pharma-genomics-nextflow", "relative_path": "hcls-pharma-genomics-nextflow" },
+        { "name": "hcls-pharma-genomics-variant-annotation", "relative_path": "hcls-pharma-genomics-variant-annotation" },
+        { "name": "hcls-pharma-genomics-single-cell-qc", "relative_path": "hcls-pharma-genomics-single-cell-qc" },
+        { "name": "hcls-pharma-genomics-scvi-tools", "relative_path": "hcls-pharma-genomics-scvi-tools" },
+        { "name": "hcls-pharma-genomics-survival-analysis", "relative_path": "hcls-pharma-genomics-survival-analysis" },
+        { "name": "hcls-pharma-lab-allotrope", "relative_path": "hcls-pharma-lab-allotrope" },
+        { "name": "hcls-cross-research-problem-selection", "relative_path": "hcls-cross-research-problem-selection" },
+        { "name": "hcls-cross-cke-pubmed", "relative_path": "hcls-cross-cke-pubmed" },
+        { "name": "hcls-cross-cke-clinical-trials", "relative_path": "hcls-cross-cke-clinical-trials" }
+      ],
+      "added_at": "2026-03-19T00:00:00.000Z"
+    }
+  ]
+}

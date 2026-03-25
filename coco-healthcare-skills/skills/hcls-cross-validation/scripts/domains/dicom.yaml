@@ -1,0 +1,48 @@
+domain: dicom
+tables:
+  study:
+    required_columns: [study_instance_uid, study_date, study_description, patient_id]
+    primary_key: [study_instance_uid]
+    type_expectations:
+      study_instance_uid: VARCHAR
+      study_date: DATE
+    semantic_checks:
+      - type: reference_format
+        column: study_instance_uid
+        pattern: "^[0-9\\.]+$"
+
+  series:
+    required_columns: [series_instance_uid, study_instance_uid, modality, series_number]
+    primary_key: [series_instance_uid]
+    type_expectations:
+      series_instance_uid: VARCHAR
+      modality: VARCHAR
+    semantic_checks:
+      - type: allowed_values
+        column: modality
+        values: [CT, MR, XR, US, MG, PT, NM, DX, CR, IO, RF, XA, OT, SC, DOC, SR, KO, PR, SEG, REG, RTPLAN, RTDOSE, RTSTRUCT]
+      - type: referential_integrity
+        column: study_instance_uid
+        ref_table: STUDY
+        ref_column: study_instance_uid
+
+  instance:
+    required_columns: [sop_instance_uid, series_instance_uid, sop_class_uid, instance_number]
+    primary_key: [sop_instance_uid]
+    type_expectations:
+      sop_instance_uid: VARCHAR
+    semantic_checks:
+      - type: reference_format
+        column: sop_instance_uid
+        pattern: "^[0-9\\.]+$"
+      - type: referential_integrity
+        column: series_instance_uid
+        ref_table: SERIES
+        ref_column: series_instance_uid
+
+  patient:
+    required_columns: [patient_id, patient_name]
+    primary_key: [patient_id]
+    type_expectations:
+      patient_id: VARCHAR
+      patient_name: VARCHAR

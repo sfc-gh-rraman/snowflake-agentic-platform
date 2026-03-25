@@ -1,0 +1,42 @@
+{
+  "hooks": [
+    {
+      "type": "tool_call",
+      "event": "before",
+      "tools": ["snowflake_sql_execute"],
+      "match": {
+        "sql_pattern": "^\\s*(CREATE|ALTER|DROP|TRUNCATE|DELETE|INSERT|UPDATE|MERGE|REPLACE|GRANT|REVOKE)\\b",
+        "case_insensitive": true
+      },
+      "action": "require_confirmation",
+      "message": "DDL/DML detected — review before executing: {{tool_call.sql | truncate(200)}}"
+    },
+    {
+      "type": "tool_call",
+      "event": "before",
+      "tools": ["bash"],
+      "match": {
+        "command_pattern": "(snowsql|snow\\s+sql|\\bcurl\\b.*snowflake)",
+        "case_insensitive": true
+      },
+      "action": "require_confirmation",
+      "message": "Snowflake CLI command detected — review before executing."
+    },
+    {
+      "type": "tool_call",
+      "event": "before",
+      "tools": ["bash"],
+      "match": {
+        "command_pattern": "(rm\\s+-rf|sudo\\s|chmod\\s|chown\\s)",
+        "case_insensitive": false
+      },
+      "action": "block",
+      "message": "Destructive system command blocked. Please run manually if needed."
+    }
+  ],
+  "metadata": {
+    "description": "Defense-in-depth Layer 3: Hard blocks on DDL/DML without user confirmation. See ARCHITECTURE.md Section 'Defense-in-Depth: Guardrail Architecture'.",
+    "version": "1.0",
+    "applies_to": ["health-sciences-incubator", "health-sciences-solutions"]
+  }
+}

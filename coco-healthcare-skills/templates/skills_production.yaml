@@ -1,0 +1,42 @@
+# Production Skills Registry — Health Sciences Solutions
+# This file is the source of truth for the production profile (health-sciences-solutions).
+# Only Tiger Team adds skills here after they graduate from incubator via SFS PR process.
+#
+# When a skill graduates:
+#   1. Copy its entry from skills_incubator.yaml to this file
+#   2. Run: python scripts/generate_orchestrators.py --profile production
+#   3. Commit both the registry update and the generated orchestrator
+
+profile:
+  name: health-sciences-solutions
+  description: >-
+    Health Sciences industry solutions architect for Snowflake. Orchestrates
+    approved, production-grade skills across medical imaging, clinical data,
+    drug safety, claims/RWE, genomics, and lab data to build end-to-end
+    solutions for healthcare and life sciences. Integrates Cortex Knowledge
+    Extensions (CKEs) for PubMed biomedical literature and ClinicalTrials.gov
+    research. Triggers: healthcare, clinical, EHR, FHIR, HL7, DICOM, imaging,
+    radiology, patient data, HIPAA, PHI, claims, RWE, pharmacovigilance,
+    drug safety, clinical trial, FAERS, genomics, variant, single-cell, RNA-seq,
+    bioinformatics, OMOP, CDM, NLP, clinical notes, lab instrument, Allotrope,
+    survival analysis, Kaplan-Meier, scvi-tools, nextflow, nf-core, React,
+    dashboard, clinical app, patient portal, healthcare UI, PubMed, biomedical
+    literature, CKE, knowledge extension, ClinicalTrials.gov, trial search,
+    literature review.
+  title: Health Sciences Solutions Profile
+  intro: >-
+    You are a **Health Sciences Solutions Architect** specializing in building
+    end-to-end data solutions on Snowflake for healthcare and life sciences.
+    You combine deep domain knowledge with Snowflake platform expertise across
+    all major health sciences business functions. All skills referenced here
+    are approved, tested, and production-grade.
+
+# Skills graduate here from incubator after Tiger Team approval.
+# Copy skill entries from skills_incubator.yaml as they are promoted.
+skills: {}
+
+# Overlaps — copy from incubator as relevant skills graduate
+overlaps: []
+
+# Patterns — only include patterns where ALL referenced skills are in this file
+patterns: []

@@ -1,6 +1,5 @@
-"""Workflow executor with LangGraph integration and Langfuse tracing."""
+"""Workflow executor for the Health Sciences Orchestrator."""
 
-import os
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -8,38 +7,11 @@ from typing import Any
 
 from .state import TaskStatus, workflow_state
 
-try:
-    from langfuse import Langfuse
-    from langfuse.decorators import observe
-
-    LANGFUSE_AVAILABLE = True
-except ImportError:
-    LANGFUSE_AVAILABLE = False
-
-    def observe(*args, **kwargs):
-        return lambda f: f
-
-
-def _init_langfuse() -> "Langfuse | None":
-    if not LANGFUSE_AVAILABLE:
-        return None
-    try:
-        return Langfuse(
-            public_key=os.environ.get("LANGFUSE_PUBLIC_KEY", ""),
-            secret_key=os.environ.get("LANGFUSE_SECRET_KEY", ""),
-            host=os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com"),
-        )
-    except Exception as e:
-        print(f"Langfuse init failed: {e}")
-        return None
-
 
 class WorkflowExecutor:
     def __init__(self, websocket_manager=None):
         self.manager = websocket_manager
-        self.langfuse = _init_langfuse()
         self.task_functions: dict[str, Callable] = {}
-        self._trace = None
 
     def register_task(self, task_id: str, fn: Callable):
         self.task_functions[task_id] = fn
@@ -64,12 +36,6 @@ class WorkflowExecutor:
                 "message": message,
             },
         )
-        if self.langfuse and self._trace:
-            self._trace.event(
-                name=f"log_{task_id}",
-                metadata={"level": level, "task_id": task_id},
-                output=message,
-            )
 
     async def update_progress(self, task_id: str, progress: int):
         workflow_state.update_task(task_id, progress=progress)
@@ -98,18 +64,7 @@ class WorkflowExecutor:
         workflow_state.start_time = datetime.now()
         workflow_state.config = config or {}
 
-        if self.langfuse:
-            self._trace = self.langfuse.trace(
-                name="agentic_platform_workflow",
-                user_id=config.get("user_id", "anonymous") if config else "anonymous",
-                metadata={
-                    "config": config,
-                    "start_time": workflow_state.start_time.isoformat(),
-                },
-            )
-
         try:
-            await self.log("orchestrator", "info", "Starting workflow execution...")
             execution_order = self._get_execution_order()
 
             for task_id in execution_order:
@@ -138,26 +93,12 @@ class WorkflowExecutor:
                     "duration": (datetime.now() - workflow_state.start_time).total_seconds(),
                 },
             )
-            await self.log("orchestrator", "success", "Workflow completed!")
-
-            if self._trace:
-                self._trace.update(
-                    output={"status": "completed"},
-                    metadata={"end_time": datetime.now().isoformat()},
-                )
 
         except Exception as e:
             await self.log("orchestrator", "error", f"Workflow failed: {str(e)}")
-            if self._trace:
-                self._trace.update(
-                    output={"status": "failed", "error": str(e)},
-                    level="ERROR",
-                )
         finally:
             workflow_state.is_running = False
             workflow_state.end_time = datetime.now()
-            if self.langfuse:
-                self.langfuse.flush()
 
     async def _execute_task(self, task_id: str):
         task = workflow_state.get_task(task_id)
@@ -175,13 +116,6 @@ class WorkflowExecutor:
         await self.log(task_id, "info", f"Starting: {task.name}")
 
         start_time = time.time()
-        span = None
-
-        if self._trace:
-            span = self._trace.span(
-                name=task_id,
-                input={"task_name": task.name, "dependencies": task.dependencies},
-            )
 
         try:
             result = await task_fn(
@@ -208,9 +142,6 @@ class WorkflowExecutor:
             )
             await self.log(task_id, "success", f"Completed in {duration:.1f}s")
 
-            if span:
-                span.end(output={"status": "success", "duration": duration})
-
         except Exception as e:
             duration = time.time() - start_time
             error_msg = str(e)
@@ -230,9 +161,6 @@ class WorkflowExecutor:
                 },
             )
             await self.log(task_id, "error", f"Failed: {error_msg}")
-
-            if span:
-                span.end(output={"status": "failed", "error": error_msg}, level="ERROR")
 
     def _get_execution_order(self) -> list[str]:
         all_tasks = workflow_state.get_all_tasks()

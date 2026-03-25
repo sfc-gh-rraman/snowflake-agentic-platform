@@ -1,0 +1,36 @@
+domain: clinical_docs
+tables:
+  parsed_documents:
+    required_columns: [document_id, file_path, parse_status, parsed_at]
+    primary_key: [document_id]
+    type_expectations:
+      document_id: VARCHAR
+      parse_status: VARCHAR
+      parsed_at: TIMESTAMP_NTZ
+    semantic_checks:
+      - type: allowed_values
+        column: parse_status
+        values: [SUCCESS, PARTIAL, FAILED, PENDING]
+
+  classified_documents:
+    required_columns: [document_id, document_type, confidence_score]
+    primary_key: [document_id]
+    type_expectations:
+      document_id: VARCHAR
+      document_type: VARCHAR
+      confidence_score: FLOAT
+    semantic_checks:
+      - type: allowed_values
+        column: document_type
+        values: [discharge_summary, pathology_report, radiology_report, progress_note, operative_note, consultation_note, lab_report, nursing_note, other]
+
+  extracted_fields:
+    required_columns: [document_id, field_name, field_value, extraction_method]
+    primary_key: [document_id, field_name]
+    type_expectations:
+      document_id: VARCHAR
+      field_name: VARCHAR
+    semantic_checks:
+      - type: allowed_values
+        column: extraction_method
+        values: [AI_EXTRACT, AI_AGG, REGEX, MANUAL]

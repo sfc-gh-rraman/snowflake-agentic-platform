@@ -40,14 +40,14 @@ export function LogPanel() {
         <h2 className="text-sm font-semibold text-slate-200">Execution Logs</h2>
         <p className="text-xs text-slate-500">{logs.length} entries</p>
       </div>
-      
+
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto p-2 space-y-1 font-mono text-xs"
       >
         {logs.length === 0 ? (
           <div className="text-slate-500 text-center py-8">
-            No logs yet. Start the workflow to see execution logs.
+            Click "Execute Plan" to run the healthcare orchestrator workflow.
           </div>
         ) : (
           logs.map((log, index) => (

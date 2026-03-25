@@ -1,5 +1,5 @@
 import { useWorkflowStore } from '../stores/workflowStore';
-import { X, RefreshCw } from 'lucide-react';
+import { X, RefreshCw, Shield, Activity } from 'lucide-react';
 
 export function LogModal() {
   const { phases, selectedTaskId, showLogModal, setShowLogModal } = useWorkflowStore();
@@ -28,6 +28,17 @@ export function LogModal() {
           <div>
             <h2 className="text-lg font-semibold text-white">{task.name}</h2>
             <p className="text-sm text-slate-400">{task.description}</p>
+            {task.skill_name && (
+              <div className="flex items-center gap-2 mt-1">
+                {task.skill_type === 'platform' ? (
+                  <Shield className="w-3 h-3 text-blue-400" />
+                ) : (
+                  <Activity className="w-3 h-3 text-purple-400" />
+                )}
+                <span className="text-xs text-cyan-400">{task.skill_name}</span>
+                <span className="text-xs text-slate-500">({task.skill_type})</span>
+              </div>
+            )}
           </div>
           <button
             onClick={() => setShowLogModal(false)}
@@ -62,6 +73,17 @@ export function LogModal() {
             </div>
           )}
 
+          {task.governance && Object.keys(task.governance).length > 0 && (
+            <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-3 mb-4">
+              <span className="text-xs text-blue-400 font-medium flex items-center gap-1">
+                <Shield className="w-3 h-3" /> Governance
+              </span>
+              <pre className="text-xs text-blue-300 mt-1 overflow-x-auto">
+                {JSON.stringify(task.governance, null, 2)}
+              </pre>
+            </div>
+          )}
+
           <div className="bg-slate-800 rounded-lg p-3">
             <span className="text-xs text-slate-500 mb-2 block">Task Logs</span>
             <div className="space-y-1 font-mono text-xs max-h-[300px] overflow-y-auto">
@@ -70,7 +92,7 @@ export function LogModal() {
               ) : (
                 task.logs.map((log, i) => (
                   <div key={i} className="flex gap-2">
-                    <span className="text-slate-600">
+                    <span className="text-slate-600 shrink-0">
                       {new Date(log.timestamp).toLocaleTimeString()}
                     </span>
                     <span
@@ -79,6 +101,8 @@ export function LogModal() {
                           ? 'text-red-400'
                           : log.level === 'success'
                           ? 'text-green-400'
+                          : log.level === 'warning'
+                          ? 'text-yellow-400'
                           : 'text-slate-300'
                       }
                     >

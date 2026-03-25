@@ -42,6 +42,10 @@ class Task:
     dependencies: list[str] = field(default_factory=list)
     logs: list[TaskLog] = field(default_factory=list)
     artifacts: dict[str, Any] = field(default_factory=dict)
+    skill_name: str | None = None
+    skill_type: str | None = None
+    preflight_status: str | None = None
+    governance: dict[str, Any] | None = None
 
 
 @dataclass
@@ -61,122 +65,152 @@ class WorkflowState:
         self.end_time: datetime | None = None
         self.config: dict[str, Any] = {}
         self.plan_id: str | None = None
+        self.session_id: str | None = None
+        self.detected_domain: str | None = None
         self._initialize_default_workflow()
 
     def _initialize_default_workflow(self):
         self.phases = [
             Phase(
-                id="discovery",
-                name="Data Discovery",
-                description="Scan and profile data sources",
+                id="preflight",
+                name="Preflight Check",
+                description="Verify Snowflake dependencies and data availability",
                 tasks=[
                     Task(
-                        id="scan_sources",
-                        name="Scan Data Sources",
-                        description="Identify tables, files, and schemas",
-                        phase="discovery",
+                        id="check_fhir_tables",
+                        name="Verify FHIR Tables",
+                        description="Check Patient, Observation, Condition tables exist",
+                        phase="preflight",
+                        skill_name="preflight-checker",
+                        skill_type="infrastructure",
                     ),
                     Task(
-                        id="profile_schema",
-                        name="Profile Schema",
-                        description="Analyze column types and statistics",
-                        phase="discovery",
-                        dependencies=["scan_sources"],
+                        id="check_observability",
+                        name="Verify Observability",
+                        description="Check execution log tables exist",
+                        phase="preflight",
+                        skill_name="preflight-checker",
+                        skill_type="infrastructure",
+                    ),
+                    Task(
+                        id="check_cke",
+                        name="Check CKE Availability",
+                        description="Probe PubMed/ClinicalTrials Marketplace listings",
+                        phase="preflight",
+                        skill_name="preflight-checker",
+                        skill_type="infrastructure",
+                        dependencies=["check_fhir_tables"],
                     ),
                 ],
             ),
             Phase(
-                id="preprocessing",
-                name="Data Preprocessing",
-                description="Transform and prepare data",
+                id="plan",
+                name="Plan Generation",
+                description="Detect domain and build execution plan",
                 tasks=[
                     Task(
-                        id="process_structured",
-                        name="Process Structured Data",
-                        description="Load and transform Parquet/CSV files",
-                        phase="preprocessing",
-                        dependencies=["profile_schema"],
+                        id="detect_domain",
+                        name="Detect Domain",
+                        description="Route request to Provider > Clinical Data Management",
+                        phase="plan",
+                        skill_name="orchestrator",
+                        skill_type="routing",
+                        dependencies=["check_fhir_tables", "check_observability"],
                     ),
                     Task(
-                        id="process_documents",
-                        name="Process Documents",
-                        description="Chunk and enrich unstructured documents",
-                        phase="preprocessing",
-                        dependencies=["profile_schema"],
+                        id="generate_plan",
+                        name="Generate Plan",
+                        description="Build 5-step execution plan with skill assignments",
+                        phase="plan",
+                        skill_name="orchestrator",
+                        skill_type="routing",
+                        dependencies=["detect_domain"],
+                    ),
+                    Task(
+                        id="approve_plan",
+                        name="Approve Plan",
+                        description="Auto-approve plan (demo mode)",
+                        phase="plan",
+                        skill_name="orchestrator",
+                        skill_type="routing",
+                        dependencies=["generate_plan"],
                     ),
                 ],
             ),
             Phase(
-                id="cortex_services",
-                name="Cortex Services",
-                description="Deploy Cortex Search and Analyst",
+                id="execute",
+                name="Skill Execution",
+                description="Execute healthcare and platform skills",
                 tasks=[
                     Task(
-                        id="deploy_search",
-                        name="Deploy Cortex Search",
-                        description="Create search service over documents",
-                        phase="cortex_services",
-                        dependencies=["process_documents"],
+                        id="verify_fhir",
+                        name="Verify FHIR Data",
+                        description="Check FHIR tables are loaded and structured correctly",
+                        phase="execute",
+                        skill_name="hcls-provider-cdata-fhir",
+                        skill_type="standalone",
+                        dependencies=["approve_plan"],
                     ),
                     Task(
-                        id="deploy_semantic",
-                        name="Deploy Semantic Model",
-                        description="Create semantic model for Analyst",
-                        phase="cortex_services",
-                        dependencies=["process_structured"],
+                        id="validate_quality",
+                        name="Validate Data Quality",
+                        description="Run completeness, schema, and semantic validation",
+                        phase="execute",
+                        skill_name="hcls-cross-validation",
+                        skill_type="standalone",
+                        dependencies=["verify_fhir"],
+                    ),
+                    Task(
+                        id="verify_governance",
+                        name="Verify PHI Masking",
+                        description="Check HIPAA masking policies via IS_ROLE_IN_SESSION()",
+                        phase="execute",
+                        skill_name="data-governance",
+                        skill_type="platform",
+                        dependencies=["validate_quality"],
+                    ),
+                    Task(
+                        id="post_governance_check",
+                        name="Post-Governance Check",
+                        description="Verify masking is active on PHI columns",
+                        phase="execute",
+                        skill_name="hcls-cross-validation",
+                        skill_type="standalone",
+                        dependencies=["verify_governance"],
+                    ),
+                    Task(
+                        id="create_analytics",
+                        name="Create Analytics View",
+                        description="Join Patient + Observation + Condition into analytics view",
+                        phase="execute",
+                        skill_name="semantic-view",
+                        skill_type="platform",
+                        dependencies=["post_governance_check"],
                     ),
                 ],
             ),
             Phase(
-                id="ml_models",
-                name="ML Models",
-                description="Train and register ML models",
+                id="summary",
+                name="Execution Summary",
+                description="Log results and produce final report",
                 tasks=[
                     Task(
-                        id="feature_engineering",
-                        name="Feature Engineering",
-                        description="Generate features from data",
-                        phase="ml_models",
-                        dependencies=["process_structured"],
+                        id="log_results",
+                        name="Log to Observability",
+                        description="Write execution logs to Snowflake observability tables",
+                        phase="summary",
+                        skill_name="observability",
+                        skill_type="infrastructure",
+                        dependencies=["create_analytics"],
                     ),
                     Task(
-                        id="train_models",
-                        name="Train Models",
-                        description="Train and evaluate ML models",
-                        phase="ml_models",
-                        dependencies=["feature_engineering"],
-                    ),
-                    Task(
-                        id="register_models",
-                        name="Register Models",
-                        description="Register models in ML Registry",
-                        phase="ml_models",
-                        dependencies=["train_models"],
-                    ),
-                ],
-            ),
-            Phase(
-                id="deployment",
-                name="App Deployment",
-                description="Generate and deploy application",
-                tasks=[
-                    Task(
-                        id="generate_app",
-                        name="Generate App Code",
-                        description="Generate React + FastAPI application",
-                        phase="deployment",
-                        dependencies=[
-                            "deploy_search",
-                            "deploy_semantic",
-                            "register_models",
-                        ],
-                    ),
-                    Task(
-                        id="deploy_spcs",
-                        name="Deploy to SPCS",
-                        description="Deploy application to Snowpark Container Services",
-                        phase="deployment",
-                        dependencies=["generate_app"],
+                        id="final_report",
+                        name="Generate Report",
+                        description="Produce validation summary and governance audit",
+                        phase="summary",
+                        skill_name="orchestrator",
+                        skill_type="routing",
+                        dependencies=["log_results"],
                     ),
                 ],
             ),
@@ -188,6 +222,8 @@ class WorkflowState:
         self.start_time = None
         self.end_time = None
         self.config = {}
+        self.session_id = None
+        self.detected_domain = None
 
     def get_task(self, task_id: str) -> Task | None:
         for phase in self.phases:
@@ -210,6 +246,8 @@ class WorkflowState:
         duration: float | None = None,
         error: str | None = None,
         artifacts: dict | None = None,
+        preflight_status: str | None = None,
+        governance: dict | None = None,
     ):
         task = self.get_task(task_id)
         if task:
@@ -223,6 +261,10 @@ class WorkflowState:
                 task.error = error
             if artifacts is not None:
                 task.artifacts.update(artifacts)
+            if preflight_status is not None:
+                task.preflight_status = preflight_status
+            if governance is not None:
+                task.governance = governance
             self._update_phase_status(task.phase)
 
     def _update_phase_status(self, phase_id: str):
@@ -275,6 +317,10 @@ class WorkflowState:
                                 for log in t.logs
                             ],
                             "artifacts": t.artifacts,
+                            "skill_name": t.skill_name,
+                            "skill_type": t.skill_type,
+                            "preflight_status": t.preflight_status,
+                            "governance": t.governance,
                         }
                         for t in p.tasks
                     ],
@@ -286,56 +332,9 @@ class WorkflowState:
             "end_time": self.end_time.isoformat() if self.end_time else None,
             "config": self.config,
             "plan_id": self.plan_id,
+            "session_id": self.session_id,
+            "detected_domain": self.detected_domain,
         }
-
-    def persist_to_snowflake(self, session) -> bool:
-        """Persist workflow state to Snowflake table."""
-        try:
-            state_json = json.dumps(self.to_dict())
-            escaped = state_json.replace("'", "''")
-            session.sql(
-                f"""
-                MERGE INTO AGENTIC_PLATFORM.ORCHESTRATOR.WORKFLOW_STATE t
-                USING (SELECT '{self.plan_id or "default"}' as plan_id) s
-                ON t.plan_id = s.plan_id
-                WHEN MATCHED THEN UPDATE SET
-                    state_json = '{escaped}',
-                    updated_at = CURRENT_TIMESTAMP()
-                WHEN NOT MATCHED THEN INSERT (plan_id, state_json, updated_at)
-                    VALUES (s.plan_id, '{escaped}', CURRENT_TIMESTAMP())
-            """
-            ).collect()
-            return True
-        except Exception as e:
-            print(f"Failed to persist state: {e}")
-            return False
-
-    def load_from_snowflake(self, session, plan_id: str) -> bool:
-        """Load workflow state from Snowflake table."""
-        try:
-            result = session.sql(
-                f"""
-                SELECT state_json FROM AGENTIC_PLATFORM.ORCHESTRATOR.WORKFLOW_STATE
-                WHERE plan_id = '{plan_id}'
-            """
-            ).collect()
-            if result:
-                state_data = json.loads(result[0]["STATE_JSON"])
-                self._load_from_dict(state_data)
-                return True
-            return False
-        except Exception as e:
-            print(f"Failed to load state: {e}")
-            return False
-
-    def _load_from_dict(self, data: dict[str, Any]):
-        self.is_running = data.get("is_running", False)
-        self.plan_id = data.get("plan_id")
-        self.config = data.get("config", {})
-        if data.get("start_time"):
-            self.start_time = datetime.fromisoformat(data["start_time"])
-        if data.get("end_time"):
-            self.end_time = datetime.fromisoformat(data["end_time"])
 
 
 workflow_state = WorkflowState()
