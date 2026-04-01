@@ -123,42 +123,77 @@
 
 ```
 +-------------------------------------------------------------------------+
-|                   THREE-LAYER DECLARATIVE ARCHITECTURE                   |
+|             AGENTIC ORCHESTRATOR — FULL-STACK ARCHITECTURE               |
 +-------------------------------------------------------------------------+
 |                                                                         |
-|  Layer 1: YAML SKILL REGISTRY                                          |
+|  LAYER 1: USER INTERFACE (React + Vite on SPCS)                        |
 |  +---------------------------------------------------------------+    |
-|  |  skills_incubator.yaml                                         |    |
-|  |  - 18 skills with triggers, domains, sub-skills                |    |
-|  |  - 10 cross-domain composition patterns                        |    |
-|  |  - Overlap declarations and CKE metadata                       |    |
+|  |  Scenario Selector --> Workflow DAG (ReactFlow + Dagre)        |    |
+|  |  CortexChat (SSE streaming, thinking steps, Vega-Lite charts) |    |
+|  |  Artifact Explorer | Observability Dashboard (Recharts)        |    |
 |  +---------------------------------------------------------------+    |
-|                              |                                          |
-|                              v                                          |
-|  Layer 2: JINJA2 TEMPLATE                                               |
+|            |  SSE /api/chat/stream              |  REST /api/*         |
+|            v                                    v                       |
+|  LAYER 2: BACKEND API (FastAPI + nginx on SPCS)                        |
 |  +---------------------------------------------------------------+    |
-|  |  orchestrator.md.j2                                            |    |
-|  |  - Plan-then-Execute protocol                                  |    |
-|  |  - Routing rules (sub-industry, task, cross-domain, overlaps)  |    |
-|  |  - Platform affinity evaluation                                |    |
-|  |  - Guardrails and anti-patterns                                |    |
+|  |  /api/chat/stream  --> CortexAgentClient (httpx SSE)           |    |
+|  |  /api/workflow      --> LangGraph Engine                       |    |
+|  |  /api/scenarios     --> Scenario Registry                      |    |
+|  |  /ws                --> WebSocket (real-time state push)        |    |
 |  +---------------------------------------------------------------+    |
-|                              |                                          |
-|                              v                                          |
-|  Layer 3: GENERATED ORCHESTRATOR                                        |
+|            |                          |                                 |
+|            v                          v                                 |
+|  LAYER 3: ORCHESTRATION ENGINE                                         |
+|  +-------------------------------+  +-----------------------------+   |
+|  | LangGraph StateGraph          |  | Cortex Agent REST API       |   |
+|  | - Scenario-driven DAG         |  | - HEALTH_COPILOT_AGENT      |   |
+|  | - Phase-based execution       |  |   (claude-4-sonnet)         |   |
+|  | - MemorySaver checkpoints     |  | - Tools:                    |   |
+|  | - Conditional edges           |  |   * Cortex Analyst (SQL)    |   |
+|  | - Per-node task functions      |  |   * Cortex Search (RAG)     |   |
+|  +-------------------------------+  |   * Clinical Doc Search     |   |
+|            |                         +-----------------------------+   |
+|            v                                                            |
+|  LAYER 4: OBSERVABILITY (Langfuse)                                     |
 |  +---------------------------------------------------------------+    |
-|  |  health-sciences-incubator.md                                  |    |
-|  |  - Complete system prompt loaded into Cortex Code              |    |
-|  |  - NEVER hand-edited; all changes flow through Layers 1-2     |    |
+|  |  Trace per workflow run | Span per task node                   |    |
+|  |  Generation logs per Cortex COMPLETE call                      |    |
+|  |  Token usage + cost estimation | Duration tracking             |    |
 |  +---------------------------------------------------------------+    |
+|            |                                                            |
+|            v                                                            |
+|  LAYER 5: SNOWFLAKE PLATFORM                                           |
+|  +---------------------------------------------------------------+    |
+|  |  Dynamic Tables      | Cortex Search Services                 |    |
+|  |  Cortex AI Functions  | Cortex Analyst (Semantic Model)        |    |
+|  |  ML Registry          | Cortex Agents                         |    |
+|  |  Stages (YAML, docs)  | SPCS (containers + ingress)           |    |
+|  +---------------------------------------------------------------+    |
+|                                                                         |
+|  LAYER 6: SKILL REGISTRY (CoCo Skills)                                 |
+|  +---------------------------------------------------------------+    |
+|  |  19 SKILL.md files across Provider, Pharma, Cross-Industry     |    |
+|  |  Platform affinities: cortex-agent, deploy-to-spcs, etc.       |    |
+|  |  Reusable patterns: SSE chat, FHIR ingest, signal detection    |    |
+|  +---------------------------------------------------------------+    |
+|                                                                         |
+|  DISPATCH FLOW (Cortex Agent --> Orchestrator):                         |
+|                                                                         |
+|  User --> ORCHESTRATOR_DISPATCHER_AGENT (Cortex Agent)                  |
+|       --> dispatch_workflow UDF (Cortex COMPLETE routing)                |
+|       --> Returns orchestrator URL with scenario parameter               |
+|       --> SPCS React app auto-starts the selected pipeline               |
 |                                                                         |
 +-------------------------------------------------------------------------+
 ```
 
-**Key Innovation: The orchestrator is generated, not coded.**
-- Add a new skill? Edit the YAML, regenerate, done.
-- Change routing logic? Edit the template, regenerate, done.
-- QA validation? 12-check suite ensures structural integrity.
+**Key Innovations:**
+- **LangGraph-native execution** -- Each scenario is a `StateGraph` DAG; tasks are nodes, phases are edges. `MemorySaver` enables checkpoint/resume.
+- **Cortex Agent as copilot** -- `HEALTH_COPILOT_AGENT` combines Cortex Analyst (text-to-SQL), Cortex Search (RAG), and document search via the native Agent REST API with SSE streaming.
+- **Dispatcher Agent as router** -- `ORCHESTRATOR_DISPATCHER_AGENT` uses a custom tool (UDF) to classify user intent and route to the correct pipeline scenario with a live orchestrator URL.
+- **Langfuse observability** -- Every LangGraph node, every Cortex COMPLETE call, and every agent interaction is traced with token counts, durations, and costs.
+- **SPCS deployment** -- Multi-stage Docker build (Node frontend + Python backend + nginx), deployed as a public SPCS service with OAuth token passthrough.
+- **Skill-based composition** -- 19 healthcare skills as reusable SKILL.md files that encode domain patterns for Cortex Code to follow.
 
 ---
 

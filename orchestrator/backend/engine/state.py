@@ -57,6 +57,218 @@ class Phase:
     tasks: list[Task] = field(default_factory=list)
 
 
+SCENARIO_WORKFLOWS = {
+    "clinical_data_warehouse": {
+        "name": "Clinical Data Warehouse",
+        "phases": [
+            Phase(
+                id="preflight",
+                name="Preflight Check",
+                description="Verify Snowflake dependencies and data availability",
+                tasks=[
+                    Task(id="check_fhir_tables", name="Verify FHIR Tables",
+                         description="Check Patient, Observation, Condition tables exist",
+                         phase="preflight", skill_name="preflight-checker", skill_type="infrastructure"),
+                    Task(id="check_observability", name="Verify Observability",
+                         description="Check execution log tables exist",
+                         phase="preflight", skill_name="preflight-checker", skill_type="infrastructure"),
+                ],
+            ),
+            Phase(
+                id="plan",
+                name="Plan Generation",
+                description="Route request and generate plan",
+                tasks=[
+                    Task(id="detect_domain", name="Detect Domain",
+                         description="Route to Clinical Data Management pipeline",
+                         phase="plan", skill_name="orchestrator", skill_type="routing",
+                         dependencies=["check_fhir_tables", "check_observability"]),
+                    Task(id="generate_plan", name="Generate Plan",
+                         description="Build execution plan with Dynamic Tables, ML, Search, Analyst, React",
+                         phase="plan", skill_name="orchestrator", skill_type="routing",
+                         dependencies=["detect_domain"]),
+                ],
+            ),
+            Phase(
+                id="execute",
+                name="Build Pipeline",
+                description="Create Dynamic Tables, ML model, Cortex Search, Semantic View, React app",
+                tasks=[
+                    Task(id="build_dynamic_tables", name="Build Dynamic Tables",
+                         description="Create PATIENT_ENRICHED, OBSERVATION_ENRICHED, CONDITION_ENRICHED, PATIENT_360",
+                         phase="execute", skill_name="dynamic-tables", skill_type="platform",
+                         dependencies=["generate_plan"]),
+                    Task(id="train_risk_model", name="Train Risk Model",
+                         description="Snowflake ML Classification on patient risk levels",
+                         phase="execute", skill_name="machine-learning", skill_type="platform",
+                         dependencies=["build_dynamic_tables"]),
+                    Task(id="create_cortex_search", name="Create Cortex Search",
+                         description="Clinical patient search service over PATIENT_360",
+                         phase="execute", skill_name="cortex-search", skill_type="platform",
+                         dependencies=["build_dynamic_tables"]),
+                    Task(id="create_semantic_view", name="Create Semantic View",
+                         description="Cortex Analyst semantic model for natural language queries",
+                         phase="execute", skill_name="cortex-analyst", skill_type="platform",
+                         dependencies=["build_dynamic_tables"]),
+                    Task(id="generate_react_app", name="Generate React App",
+                         description="AI-generated clinical dashboard with SPCS deployment spec",
+                         phase="execute", skill_name="build-react-app", skill_type="platform",
+                         dependencies=["train_risk_model"]),
+                ],
+            ),
+            Phase(
+                id="summary",
+                name="Execution Summary",
+                description="Log results and produce final report",
+                tasks=[
+                    Task(id="log_results", name="Log to Observability",
+                         description="Write execution logs to Snowflake",
+                         phase="summary", skill_name="observability", skill_type="infrastructure",
+                         dependencies=["generate_react_app", "create_cortex_search", "create_semantic_view"]),
+                    Task(id="final_report", name="Generate Report",
+                         description="AI-powered summary of all created artifacts",
+                         phase="summary", skill_name="orchestrator", skill_type="routing",
+                         dependencies=["log_results"]),
+                ],
+            ),
+        ],
+    },
+    "drug_safety": {
+        "name": "Drug Safety Signal Detection",
+        "phases": [
+            Phase(
+                id="preflight",
+                name="Preflight Check",
+                description="Verify Snowflake dependencies",
+                tasks=[
+                    Task(id="check_fhir_tables", name="Verify Environment",
+                         description="Check database, warehouse, and Cortex availability",
+                         phase="preflight", skill_name="preflight-checker", skill_type="infrastructure"),
+                ],
+            ),
+            Phase(
+                id="plan",
+                name="Plan Generation",
+                description="Plan pharmacovigilance pipeline",
+                tasks=[
+                    Task(id="detect_domain", name="Detect Domain",
+                         description="Route to Pharma > Drug Safety pipeline",
+                         phase="plan", skill_name="orchestrator", skill_type="routing",
+                         dependencies=["check_fhir_tables"]),
+                    Task(id="generate_plan", name="Generate Plan",
+                         description="Build FAERS analysis plan with PRR/ROR signal detection",
+                         phase="plan", skill_name="orchestrator", skill_type="routing",
+                         dependencies=["detect_domain"]),
+                ],
+            ),
+            Phase(
+                id="execute",
+                name="Build Safety Pipeline",
+                description="Create FAERS data, run signal detection, build dashboards",
+                tasks=[
+                    Task(id="setup_faers_data", name="Setup FAERS Data",
+                         description="Create synthetic FAERS adverse event reports (2000 rows)",
+                         phase="execute", skill_name="hcls-pharma-dsafety-pharmacovigilance",
+                         skill_type="standalone", dependencies=["generate_plan"]),
+                    Task(id="run_signal_detection", name="Run Signal Detection",
+                         description="Compute PRR/ROR disproportionality analysis",
+                         phase="execute", skill_name="hcls-pharma-dsafety-pharmacovigilance",
+                         skill_type="standalone", dependencies=["setup_faers_data"]),
+                    Task(id="build_safety_dashboard", name="Build Safety Dashboard",
+                         description="Create dashboard summary, temporal trends, signal summary views",
+                         phase="execute", skill_name="streamlit", skill_type="platform",
+                         dependencies=["run_signal_detection"]),
+                ],
+            ),
+            Phase(
+                id="summary",
+                name="Execution Summary",
+                description="Log results and produce safety report",
+                tasks=[
+                    Task(id="log_results", name="Log to Observability",
+                         description="Write execution logs to Snowflake",
+                         phase="summary", skill_name="observability", skill_type="infrastructure",
+                         dependencies=["build_safety_dashboard"]),
+                    Task(id="final_report", name="Generate Report",
+                         description="AI-powered pharmacovigilance summary",
+                         phase="summary", skill_name="orchestrator", skill_type="routing",
+                         dependencies=["log_results"]),
+                ],
+            ),
+        ],
+    },
+    "clinical_docs": {
+        "name": "Clinical Document Intelligence",
+        "phases": [
+            Phase(
+                id="preflight",
+                name="Preflight Check",
+                description="Verify Snowflake dependencies",
+                tasks=[
+                    Task(id="check_fhir_tables", name="Verify Environment",
+                         description="Check database, warehouse, FHIR data, and Cortex availability",
+                         phase="preflight", skill_name="preflight-checker", skill_type="infrastructure"),
+                ],
+            ),
+            Phase(
+                id="plan",
+                name="Plan Generation",
+                description="Plan clinical document pipeline",
+                tasks=[
+                    Task(id="detect_domain", name="Detect Domain",
+                         description="Route to Provider > Clinical Docs pipeline",
+                         phase="plan", skill_name="orchestrator", skill_type="routing",
+                         dependencies=["check_fhir_tables"]),
+                    Task(id="generate_plan", name="Generate Plan",
+                         description="Build document intelligence plan with parse, search, agent",
+                         phase="plan", skill_name="orchestrator", skill_type="routing",
+                         dependencies=["detect_domain"]),
+                ],
+            ),
+            Phase(
+                id="execute",
+                name="Build Document Pipeline",
+                description="Create docs, search service, and intelligence agent",
+                tasks=[
+                    Task(id="setup_clinical_docs", name="Setup Clinical Docs",
+                         description="Generate synthetic clinical docs via Cortex AI, extract fields",
+                         phase="execute", skill_name="hcls-provider-cdata-clinical-docs",
+                         skill_type="standalone", dependencies=["generate_plan"]),
+                    Task(id="create_doc_search", name="Create Doc Search",
+                         description="Build Cortex Search service over clinical documents",
+                         phase="execute", skill_name="cortex-search", skill_type="platform",
+                         dependencies=["setup_clinical_docs"]),
+                    Task(id="create_doc_agent", name="Create Doc Agent",
+                         description="Clinical document intelligence agent with search + analytics",
+                         phase="execute", skill_name="cortex-agent", skill_type="platform",
+                         dependencies=["create_doc_search"]),
+                ],
+            ),
+            Phase(
+                id="summary",
+                name="Execution Summary",
+                description="Log results and produce document intelligence report",
+                tasks=[
+                    Task(id="log_results", name="Log to Observability",
+                         description="Write execution logs to Snowflake",
+                         phase="summary", skill_name="observability", skill_type="infrastructure",
+                         dependencies=["create_doc_agent"]),
+                    Task(id="final_report", name="Generate Report",
+                         description="AI-powered document intelligence summary",
+                         phase="summary", skill_name="orchestrator", skill_type="routing",
+                         dependencies=["log_results"]),
+                ],
+            ),
+        ],
+    },
+}
+
+
+def _deep_copy_phases(phases: list[Phase]) -> list[Phase]:
+    import copy
+    return copy.deepcopy(phases)
+
+
 class WorkflowState:
     def __init__(self):
         self.phases: list[Phase] = []
@@ -67,6 +279,7 @@ class WorkflowState:
         self.plan_id: str | None = None
         self.session_id: str | None = None
         self.detected_domain: str | None = None
+        self.active_scenario: str | None = None
         self._initialize_default_workflow()
 
     def _initialize_default_workflow(self):
@@ -216,6 +429,13 @@ class WorkflowState:
             ),
         ]
 
+    def initialize_scenario(self, scenario_key: str):
+        if scenario_key in SCENARIO_WORKFLOWS:
+            self.phases = _deep_copy_phases(SCENARIO_WORKFLOWS[scenario_key]["phases"])
+            self.active_scenario = scenario_key
+        else:
+            self._initialize_default_workflow()
+
     def reset(self):
         self._initialize_default_workflow()
         self.is_running = False
@@ -224,6 +444,7 @@ class WorkflowState:
         self.config = {}
         self.session_id = None
         self.detected_domain = None
+        self.active_scenario = None
 
     def get_task(self, task_id: str) -> Task | None:
         for phase in self.phases:
@@ -334,6 +555,7 @@ class WorkflowState:
             "plan_id": self.plan_id,
             "session_id": self.session_id,
             "detected_domain": self.detected_domain,
+            "active_scenario": self.active_scenario,
         }
 
 

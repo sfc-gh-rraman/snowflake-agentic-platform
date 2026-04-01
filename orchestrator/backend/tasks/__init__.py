@@ -18,8 +18,15 @@ from .workflow_tasks import (
     verify_governance,
 )
 
+from .scenario_tasks import (
+    SCENARIO_DEFINITIONS,
+    SCENARIO_TASK_REGISTRY,
+)
+
 __all__ = [
     "TASK_REGISTRY",
+    "SCENARIO_TASK_REGISTRY",
+    "SCENARIO_DEFINITIONS",
     "register_all_tasks",
     "check_fhir_tables",
     "check_observability",

@@ -4,14 +4,14 @@ set -e
 DATABASE="${DATABASE:-AGENTIC_PLATFORM}"
 SCHEMA="${SCHEMA:-ORCHESTRATOR}"
 IMAGE_REPO="${IMAGE_REPO:-ORCHESTRATOR_IMAGES}"
-SERVICE_NAME="${SERVICE_NAME:-AGENTIC_ORCHESTRATOR}"
+SERVICE_NAME="${SERVICE_NAME:-HEALTH_ORCHESTRATOR}"
 COMPUTE_POOL="${COMPUTE_POOL:-AGENTIC_COMPUTE_POOL}"
-CONNECTION="${CONNECTION:-default}"
+CONNECTION="${CONNECTION:-my_snowflake}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-echo "=== Agentic Platform Orchestrator SPCS Deployment ==="
+echo "=== Health Sciences Orchestrator — SPCS Deployment ==="
 echo "Database: $DATABASE"
 echo "Schema: $SCHEMA"
 echo "Service: $SERVICE_NAME"
@@ -67,9 +67,6 @@ spec:
   containers:
   - name: orchestrator
     image: $IMAGE_PATH
-    env:
-      SNOWFLAKE_HOST: \"{{SNOWFLAKE_HOST}}\"
-      SNOWFLAKE_ACCOUNT: \"{{SNOWFLAKE_ACCOUNT}}\"
     resources:
       requests:
         memory: 2Gi
@@ -77,9 +74,6 @@ spec:
       limits:
         memory: 4Gi
         cpu: 2000m
-    readinessProbe:
-      port: 8080
-      path: /health
   endpoints:
   - name: app
     port: 8080
@@ -92,7 +86,7 @@ MAX_INSTANCES = 1
 echo ""
 echo "Waiting for service to start..."
 for i in {1..30}; do
-    STATUS=$(snow sql -q "SELECT SYSTEM\$GET_SERVICE_STATUS('$DATABASE.$SCHEMA.$SERVICE_NAME')" -c "$CONNECTION" --format json | python3 -c "import sys,json; d=json.load(sys.stdin); s=json.loads(d[0][\"SYSTEM\\\$GET_SERVICE_STATUS('$DATABASE.$SCHEMA.$SERVICE_NAME')\"]); print(s[0]['status'] if s else 'UNKNOWN')" 2>/dev/null || echo "UNKNOWN")
+    STATUS=$(snow sql -q "SELECT SYSTEM\$GET_SERVICE_STATUS('$DATABASE.$SCHEMA.$SERVICE_NAME')" -c "$CONNECTION" --format json | python3 -c "import sys,json; d=json.load(sys.stdin); s=json.loads(d[0][list(d[0].keys())[0]]); print(s[0]['status'] if s else 'UNKNOWN')" 2>/dev/null || echo "UNKNOWN")
     echo "  Status: $STATUS"
     if [ "$STATUS" = "READY" ]; then
         break
@@ -110,9 +104,8 @@ for i in {1..12}; do
         echo "  DEPLOYMENT COMPLETE!"
         echo "=========================================="
         echo ""
-        echo "  Orchestrator URL: https://$ENDPOINT_URL"
-        echo ""
-        echo "  View in Langfuse: https://cloud.langfuse.com"
+        echo "  Health Sciences Orchestrator URL:"
+        echo "  https://$ENDPOINT_URL"
         echo ""
         echo "=========================================="
         exit 0

@@ -6,7 +6,7 @@ RUN npm ci --silent
 COPY frontend/ ./
 RUN npm run build
 
-# Stage 2: Production Runtime
+# Stage 2: Production Runtime (pinned to 3.11 — must match .python-version)
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y \

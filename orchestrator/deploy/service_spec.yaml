@@ -2,12 +2,6 @@ spec:
   containers:
   - name: orchestrator
     image: /${DB}/${SCHEMA}/${IMAGE_REPO}/orchestrator:latest
-    env:
-      SNOWFLAKE_HOST: "{{SNOWFLAKE_HOST}}"
-      SNOWFLAKE_ACCOUNT: "{{SNOWFLAKE_ACCOUNT}}"
-      LANGFUSE_PUBLIC_KEY: "${LANGFUSE_PUBLIC_KEY}"
-      LANGFUSE_SECRET_KEY: "${LANGFUSE_SECRET_KEY}"
-      LANGFUSE_HOST: "https://cloud.langfuse.com"
     resources:
       requests:
         memory: 2Gi

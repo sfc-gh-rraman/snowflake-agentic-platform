@@ -1,153 +1,265 @@
-# Snowflake Agentic Platform
+# CoCo Healthcare Skills Orchestrator
 
-> Describe your healthcare problem. The platform builds the solution.
+> Agentic platform for deploying healthcare AI solutions on Snowflake in minutes, not months.
 
-A composable, skill-based orchestrator on Cortex Code that receives natural language healthcare
-requests and autonomously composes the right combination of industry skills and Snowflake platform
-capabilities into end-to-end solutions.
+Built with **LangGraph** + **Snowflake Cortex** + **Langfuse** + **ReactFlow**
+
+---
 
 ## What It Does
 
-```
-INPUT:  "I have DICOM files from radiology, FHIR bundles from Epic, and
-         daily clinical reports. Build an imaging analytics platform with
-         document search, PHI governance, and a patient dashboard."
-      + Snowflake account with Cortex
+A natural language prompt like _"Analyze adverse events for our cardiovascular drug portfolio"_ triggers an end-to-end agentic pipeline that:
 
-OUTPUT: - Curated Snowflake tables (DICOM metadata, FHIR resources, OMOP CDM)
-        - Cortex Search over clinical documents and imaging metadata
-        - Semantic views for natural language analytics
-        - ML models registered in Snowflake ML Registry
-        - Cortex Agent combining Search + Analyst + ML tools
-        - Streamlit dashboard or React + SPCS application
-        - HIPAA governance (masking, row-access, audit trails)
-```
+1. **Routes** to the correct healthcare scenario (Clinical Data, Drug Safety, Clinical Docs, ML Risk)
+2. **Generates** an execution plan with skill assignments
+3. **Gates** the plan for human review (approve/modify/reject steps)
+4. **Executes** Snowflake objects (Dynamic Tables, Cortex Search, ML models, Cortex Agents)
+5. **Traces** every step in Langfuse with full LLM observability
 
-## Core Principles
-
-| Principle | Description |
-|-----------|-------------|
-| **Composable Skills** | Independent building blocks encoding deep domain expertise. |
-| **Orchestrator-Driven** | Generated system prompt detects intent, routes, and chains skills. |
-| **Plan-Gated** | No execution without explicit user approval. |
-| **Generated, Not Hand-Edited** | Orchestrator produced from YAML registry + Jinja2 template. |
-| **Knowledge-Grounded** | CKEs provide RAG over PubMed, ClinicalTrials.gov, and data models. |
-| **Governance by Default** | HIPAA guardrails enforced across all workflows. |
-| **Cortex Maximalist** | Leverage every Cortex capability: LLM, Search, Analyst, Agent, AI Functions. |
+---
 
 ## Architecture
 
 ```
-+------------------------------------------------------------------+
-|  ORCHESTRATOR AGENT (Generated System Prompt on Cortex Code)     |
-|  Intent Detection --> Domain Routing --> Skill Composition        |
-+------------------------------------------------------------------+
-       |            |             |             |
-       v            v             v             v
-  +---------+  +---------+  +---------+  +-----------+
-  |Provider |  |Provider |  | Pharma  |  |  Pharma   |
-  |Imaging  |  |ClinData |  |DrugSafe |  | Genomics  |
-  +---------+  +---------+  +---------+  +-----------+
-       |   +--------+ +--------+ +----------+    |
-       |   |Claims  | |  Lab   | |Research  |    |
-       |   +--------+ +--------+ +----------+    |
-       |                                          |
-       |     SHARED KNOWLEDGE (on-demand CKEs)    |
-       |     PubMed | ClinicalTrials.gov           |
-+------------------------------------------------------------------+
-|  SNOWFLAKE PLATFORM SKILLS (10 bundled)                          |
-|  Dynamic Tables | Governance | Streamlit | SPCS | ML | dbt       |
-|  Cortex AI | Agent | Search | Semantic View                      |
-+------------------------------------------------------------------+
++-------------------------------------------------------------------+
+|                        User Interface                              |
+|   React + ReactFlow + Zustand + Vega-Lite                         |
+|   (Scenario cards, DAG, Plan Gate modal, AI Chat, Skills Catalog) |
++-------------------------------------------------------------------+
+        |                           |
+        v                           v
++-------------------+   +-------------------+
+|  FastAPI Backend  |   |   Nginx (8080)    |
+|  uvicorn :8000    |<--|   reverse proxy   |
++-------------------+   +-------------------+
+        |
+        v
++-------------------------------------------------------------------+
+|                  LangGraph Orchestration Engine                     |
+|  StateGraph | MemorySaver | interrupt_before (Plan Gate)           |
+|  Parallel execution | Checkpoint/resume                            |
++-------------------------------------------------------------------+
+        |                           |
+        v                           v
++-------------------+   +-------------------+
+| Langfuse Tracing  |   | Snowflake Platform|
+| Traces, Spans,    |   | Dynamic Tables    |
+| Generations, Cost |   | Cortex Search     |
++-------------------+   | Cortex Agent      |
+                        | Cortex Analyst    |
+                        | ML Registry       |
+                        | SPCS Services     |
+                        +-------------------+
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full architecture details.
+---
 
-## Skill Inventory (18 skills)
+## Scenarios
 
-### Provider
+| Scenario | Skills Used | What Gets Built |
+|----------|------------|-----------------|
+| **Clinical Data Warehouse** | Dynamic Tables, ML, Cortex Search, Cortex Analyst, React | Patient 360 view with risk model, search service, semantic model, dashboard |
+| **Drug Safety Signal Detection** | FAERS data generation, PRR/ROR analysis, Streamlit | Pharmacovigilance pipeline with signal detection dashboard |
+| **Clinical Document Intelligence** | Doc generation, NLP extraction, Cortex Search, Cortex Agent | Document search index and intelligence agent |
 
-| Skill | Description |
-|-------|-------------|
-| `hcls-provider-imaging` | Router: DICOM imaging lifecycle (parse, ingest, analytics, viewer, governance, ML) |
-| `hcls-provider-imaging-dicom-parser` | Standalone DICOM metadata parser with 18-table data model |
-| `hcls-provider-cdata-fhir` | FHIR R4 resources to analytics-ready Snowflake tables |
-| `hcls-provider-cdata-clinical-nlp` | Structured entity extraction from clinical text |
-| `hcls-provider-cdata-omop` | EHR/claims to OMOP CDM v5.4 with vocabulary mapping |
-| `hcls-provider-cdata-clinical-docs` | Router: clinical document intelligence (extraction, search, agent, viewer) |
-| `hcls-provider-claims-data-analysis` | Claims-based RWE: cohort building, treatment patterns, HEDIS |
+---
 
-### Pharma
+## Quick Start
 
-| Skill | Description |
-|-------|-------------|
-| `hcls-pharma-dsafety-pharmacovigilance` | FDA FAERS adverse event analysis with PRR/ROR signal detection |
-| `hcls-pharma-dsafety-clinical-trial-protocol` | Clinical trial protocol generation for FDA submissions |
-| `hcls-pharma-genomics-nextflow` | nf-core pipelines (rnaseq, sarek, atacseq) on sequencing data |
-| `hcls-pharma-genomics-variant-annotation` | Variant annotation with ClinVar, gnomAD, ACMG classification |
-| `hcls-pharma-genomics-single-cell-qc` | Automated QC for single-cell RNA-seq |
-| `hcls-pharma-genomics-scvi-tools` | Deep learning single-cell analysis (scVI, scANVI, totalVI, etc.) |
-| `hcls-pharma-genomics-survival-analysis` | Kaplan-Meier, Cox regression, time-to-event analysis |
-| `hcls-pharma-lab-allotrope` | Lab instrument files to Allotrope Simple Model JSON/CSV |
+### Prerequisites
 
-### Cross-Industry
+- Snowflake account with **Cortex AI** enabled
+- [Snowflake CLI](https://docs.snowflake.com/en/developer-guide/snowflake-cli-v2/index) (`snow`) installed
+- Docker (for SPCS deployment)
+- Node.js 18+ and Python 3.11+
+- A named Snowflake connection configured (`snow connection add`)
 
-| Skill | Description |
-|-------|-------------|
-| `hcls-cross-research-problem-selection` | Scientific problem selection using Fischbach & Walsh |
-| `hcls-cross-cke-pubmed` | RAG over PubMed biomedical literature |
-| `hcls-cross-cke-clinical-trials` | RAG over ClinicalTrials.gov registry |
+### 1. Setup Snowflake Objects
 
-## Repository Structure
+```bash
+# Run the setup SQL (creates database, schemas, compute pool, stages)
+snow sql -f orchestrator/deploy/setup.sql -c my_snowflake
+```
+
+### 2. Deploy to SPCS (Recommended)
+
+```bash
+cd orchestrator
+./deploy/deploy.sh
+```
+
+This will:
+- Build the Docker image (frontend + backend + nginx)
+- Push to Snowflake image repository
+- Create the SPCS service
+- Print the endpoint URL
+
+**Customize deployment:**
+```bash
+DATABASE=MY_DB SCHEMA=MY_SCHEMA COMPUTE_POOL=MY_POOL CONNECTION=my_conn ./deploy/deploy.sh
+```
+
+### 3. Local Development
+
+```bash
+# Terminal 1: Backend
+cd orchestrator/backend
+pip install -r requirements.txt
+SNOWFLAKE_CONNECTION_NAME=my_snowflake python -m uvicorn api.main:app \
+  --host 0.0.0.0 --port 8000 --reload --reload-dir . \
+  --app-dir /path/to/snowflake-agentic-platform/orchestrator/backend
+
+# Terminal 2: Frontend
+cd orchestrator/frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:5173
+
+---
+
+## Plan Gate (Human-in-the-Loop)
+
+After the plan phase completes, the orchestrator pauses and shows a **Plan Gate Modal**:
+
+- Review all execution steps with skill badges
+- Toggle individual steps on/off
+- Approve to proceed or Reject to cancel
+- Skipped steps are marked as `SKIPPED` in the DAG
+
+The gate is powered by LangGraph's `interrupt_before` mechanism with checkpoint/resume.
+
+---
+
+## Skills Catalog (GitHub Integration)
+
+The **Skills** tab in the right panel pulls the skill catalog from the companion GitHub repo:
+
+```
+https://github.com/Snowflake-Solutions/health-sciences-coco-skills-incubator
+```
+
+Set `GITHUB_TOKEN` env var for private repo access. Falls back to a built-in catalog if the API is unreachable.
+
+---
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SNOWFLAKE_CONNECTION_NAME` | Named Snowflake connection | `my_snowflake` |
+| `LANGFUSE_PUBLIC_KEY` | Langfuse public key (optional) | - |
+| `LANGFUSE_SECRET_KEY` | Langfuse secret key (optional) | - |
+| `LANGFUSE_HOST` | Langfuse host URL | `https://cloud.langfuse.com` |
+| `GITHUB_TOKEN` | GitHub PAT for private skills repo | - |
+| `SKILLS_GITHUB_REPO` | Skills repo `owner/name` | `Snowflake-Solutions/health-sciences-coco-skills-incubator` |
+
+---
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/scenarios` | GET | List available scenarios |
+| `/api/workflow` | GET | Current workflow state |
+| `/api/workflow/start` | POST | Start workflow with scenario |
+| `/api/workflow/start-nl` | POST | Start via natural language routing |
+| `/api/workflow/approve` | POST | Approve/reject plan gate |
+| `/api/workflow/approval-status` | GET | Check if awaiting approval |
+| `/api/workflow/reset` | POST | Reset workflow |
+| `/api/workflow/task/{id}` | GET | Task details |
+| `/api/workflow/task/{id}/retry` | POST | Retry failed task |
+| `/api/workflow/logs` | GET | Execution logs |
+| `/api/workflow/langfuse` | GET | Langfuse trace info + costs |
+| `/api/workflow/costs` | GET | Real Snowflake credit usage |
+| `/api/workflow/data-freshness` | GET | Dynamic Table refresh status |
+| `/api/skills/catalog` | GET | Skills from GitHub repo |
+| `/api/chat/stream` | POST | Cortex Agent SSE chat |
+| `/ws` | WebSocket | Real-time updates |
+
+---
+
+## Directory Structure
 
 ```
 snowflake-agentic-platform/
-+-- docs/                              # Architecture & guides
-|   +-- ARCHITECTURE.md
-|   +-- EXECUTIVE_VISION.md
-|   +-- DEVOPS.md
-+-- coco-healthcare-skills/            # Industry skills repository
-    +-- agents/                        # Generated orchestrator agents
-    +-- skills/                        # 18 healthcare skills
-    +-- templates/                     # YAML registry + Jinja2 template
-    +-- shared/                        # Preflight checker infrastructure
-    +-- scripts/                       # Generation, setup, QA scripts
-    +-- references/                    # Data model spreadsheets
-    +-- README.md                      # Detailed getting started guide
++-- orchestrator/
+|   +-- backend/
+|   |   +-- api/              # FastAPI routes, WebSocket, chat SSE
+|   |   +-- engine/           # LangGraph StateGraph, state management, Langfuse
+|   |   +-- tasks/            # Scenario task implementations (SQL, Cortex calls)
+|   |   +-- services/         # Cortex Agent client
+|   |   +-- config.py         # Runtime configuration
+|   |   +-- requirements.txt  # Python dependencies
+|   +-- frontend/
+|   |   +-- src/
+|   |   |   +-- components/   # React components (18 total)
+|   |   |   +-- hooks/        # useWebSocket
+|   |   |   +-- stores/       # Zustand workflowStore
+|   |   |   +-- types/        # TypeScript interfaces
+|   |   +-- package.json
+|   +-- deploy/
+|   |   +-- Dockerfile        # Multi-stage (node build + python runtime + nginx)
+|   |   +-- nginx.conf        # Reverse proxy config
+|   |   +-- supervisord.conf  # Process manager (nginx + uvicorn)
+|   |   +-- deploy.sh         # One-command SPCS deployment
+|   |   +-- setup.sql         # Database/schema/compute pool setup
+|   +-- cortex/
+|   |   +-- health_semantic_model.yaml  # Cortex Analyst semantic model
++-- docs/
+|   +-- EXECUTIVE_VISION.md   # Pitch deck (markdown slides)
+|   +-- ARCHITECTURE.md       # Technical architecture
+|   +-- DEMO_QA.md            # Stakeholder Q&A from demo
+|   +-- DEVOPS.md             # Deployment operations guide
++-- .gitignore
++-- pyproject.toml
++-- README.md                 # This file
 ```
 
-## Tech Stack
+---
 
-| Layer | Technology |
-|-------|------------|
-| Runtime | Cortex Code (CoCo) |
-| Orchestration | Generated Markdown system prompt |
-| Industry Skills | SKILL.md + Python scripts + domain references |
-| Platform Skills | CoCo bundled (Dynamic Tables, Governance, Streamlit, SPCS, ML, etc.) |
-| Knowledge | Cortex Search (PubMed CKE, ClinicalTrials.gov CKE, Data Model CKEs) |
-| LLM | Snowflake Cortex LLM |
-| AI Functions | AI_PARSE_DOCUMENT, AI_EXTRACT, AI_COMPLETE, AI_AGG |
-| Search | Cortex Search |
-| Semantic | Cortex Analyst + Semantic Views |
-| Agents | Cortex Agent |
-| ML | Snowpark ML + Registry |
-| Governance | Masking Policies, Row-Access Policies, ACCESS_HISTORY |
-| Generation | YAML + Jinja2 + Python |
+## Snowflake Objects Created
 
-## Getting Started
+| Schema | Object | Type |
+|--------|--------|------|
+| `ORCHESTRATOR` | `HEALTH_ORCHESTRATOR` | SPCS Service |
+| `ORCHESTRATOR` | `HEALTH_COPILOT_AGENT` | Cortex Agent |
+| `ORCHESTRATOR` | `ORCHESTRATOR_DISPATCHER_AGENT` | Cortex Agent |
+| `ORCHESTRATOR` | `DISPATCH_WORKFLOW_FN` | UDF (tool for dispatcher agent) |
+| `FHIR_DEMO` | `PATIENT`, `OBSERVATION`, `CONDITION` | Tables |
+| `ANALYTICS` | `PATIENT_ENRICHED`, `OBSERVATION_ENRICHED`, `CONDITION_ENRICHED`, `PATIENT_360` | Dynamic Tables |
+| `ML` | `RISK_TRAINING_DATA`, `RISK_PREDICTIONS`, `PATIENT_RISK_CLASSIFIER` | Tables / ML Model |
+| `CORTEX` | `CLINICAL_PATIENT_SEARCH` | Cortex Search Service |
+| `CORTEX` | `SEMANTIC_MODELS` (stage) | Cortex Analyst Model |
+| `DRUG_SAFETY` | `FAERS_DEMO`, `SIGNAL_DETECTION` | Tables |
+| `CLINICAL_DOCS` | `DOCUMENT_REGISTRY`, `EXTRACTED_FIELDS`, `CLINICAL_DOC_SEARCH` | Tables / Search |
 
-See [coco-healthcare-skills/README.md](coco-healthcare-skills/README.md) for detailed setup instructions.
+---
 
-Quick start:
-1. Clone the repo
-2. Register skills in `~/.snowflake/cortex/skills.json`
-3. Create the agent profile
-4. Activate with `/agents` in Cortex Code
-5. Ask healthcare questions in natural language
+## Key Design Decisions
 
-## Documentation
+1. **Cortex Agent custom tools can ONLY call UDFs** (not stored procedures). The dispatcher agent uses `DISPATCH_WORKFLOW_FN` as a SQL UDF.
+2. **LangGraph `interrupt_before`** powers the Plan Gate. The interrupt fires before the first execute-phase node.
+3. **No readiness probe** in SPCS service spec (nginx + supervisord causes PENDING loop).
+4. **SSE + WebSocket dual channel** for real-time updates. SSE for workflow state polling, WebSocket for task-level events.
+5. **Langfuse is optional** but recommended. Set env vars to enable full tracing.
 
-- [Architecture](docs/ARCHITECTURE.md) -- Full system design
-- [Executive Vision](docs/EXECUTIVE_VISION.md) -- Vision and roadmap
-- [DevOps](docs/DEVOPS.md) -- CI/CD, testing, observability
-- [Skills README](coco-healthcare-skills/README.md) -- Detailed skill inventory and setup
+---
+
+## Troubleshooting
+
+```sql
+-- Check service status
+SHOW SERVICES LIKE 'HEALTH_ORCHESTRATOR' IN SCHEMA AGENTIC_PLATFORM.ORCHESTRATOR;
+
+-- Get logs
+SELECT SYSTEM$GET_SERVICE_LOGS('AGENTIC_PLATFORM.ORCHESTRATOR.HEALTH_ORCHESTRATOR', 0, 'orchestrator', 100);
+
+-- Get endpoint URL
+SHOW ENDPOINTS IN SERVICE AGENTIC_PLATFORM.ORCHESTRATOR.HEALTH_ORCHESTRATOR;
+
+-- Restart service
+ALTER SERVICE AGENTIC_PLATFORM.ORCHESTRATOR.HEALTH_ORCHESTRATOR SUSPEND;
+ALTER SERVICE AGENTIC_PLATFORM.ORCHESTRATOR.HEALTH_ORCHESTRATOR RESUME;
+```

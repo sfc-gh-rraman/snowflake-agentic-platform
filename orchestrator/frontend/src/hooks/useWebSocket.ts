@@ -5,7 +5,7 @@ import { WebSocketMessage } from '../types/workflow';
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
-  const { addLog } = useWorkflowStore();
+  const { addLog, openPlanGate } = useWorkflowStore();
 
   useEffect(() => {
     const connect = () => {
@@ -52,6 +52,12 @@ export function useWebSocket() {
             message: message.payload.message as string,
           });
           break;
+        case 'approval_required':
+          openPlanGate(
+            message.payload.task_id as string,
+            (message.payload.pending_tasks as { id: string; name: string; description: string; skill_name: string | null; skill_type: string | null; dependencies: string[]; enabled: boolean }[]) || [],
+          );
+          break;
         case 'pong':
           break;
         default:
@@ -74,7 +80,7 @@ export function useWebSocket() {
       }
       wsRef.current?.close();
     };
-  }, [addLog]);
+  }, [addLog, openPlanGate]);
   
   return wsRef;
 }

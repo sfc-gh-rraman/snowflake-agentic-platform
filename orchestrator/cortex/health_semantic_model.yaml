@@ -1,0 +1,370 @@
+name: health_semantic_model
+description: >
+  Healthcare analytics semantic model covering patient demographics, clinical observations,
+  conditions, risk predictions, drug safety adverse events, and signal detection.
+  Data resides in the AGENTIC_PLATFORM database across FHIR_DEMO, ANALYTICS, ML, and DRUG_SAFETY schemas.
+
+tables:
+  - name: PATIENT_360
+    base_table:
+      database: AGENTIC_PLATFORM
+      schema: ANALYTICS
+      table: PATIENT_360
+    description: >
+      Enriched patient view combining demographics, observation counts, condition counts,
+      and computed risk level. This is the primary patient-level analytics table.
+    dimensions:
+      - name: patient_id
+        expr: PATIENT_ID
+        description: Unique patient identifier
+        data_type: VARCHAR
+      - name: family_name
+        expr: FAMILY_NAME
+        description: Patient last name
+        data_type: VARCHAR
+      - name: given_name
+        expr: GIVEN_NAME
+        description: Patient first name
+        data_type: VARCHAR
+      - name: gender
+        expr: GENDER
+        description: Patient gender (male/female)
+        data_type: VARCHAR
+      - name: age_group
+        expr: AGE_GROUP
+        description: Age group category (Child, Adult, Senior)
+        data_type: VARCHAR
+      - name: address_city
+        expr: ADDRESS_CITY
+        description: Patient city
+        data_type: VARCHAR
+      - name: address_state
+        expr: ADDRESS_STATE
+        description: Patient state
+        data_type: VARCHAR
+      - name: mrn
+        expr: MRN
+        description: Medical record number
+        data_type: VARCHAR
+      - name: computed_risk_level
+        expr: COMPUTED_RISK_LEVEL
+        description: Risk classification (LOW, MODERATE, HIGH)
+        data_type: VARCHAR
+      - name: condition_list
+        expr: CONDITION_LIST
+        description: Comma-separated list of patient conditions
+        data_type: VARCHAR
+      - name: condition_categories
+        expr: CONDITION_CATEGORIES
+        description: Categories of conditions (Cardiovascular, Metabolic, etc.)
+        data_type: VARCHAR
+    time_dimensions:
+      - name: birth_date
+        expr: BIRTH_DATE
+        description: Patient date of birth
+        data_type: DATE
+      - name: latest_observation_date
+        expr: LATEST_OBSERVATION_DATE
+        description: Most recent clinical observation
+        data_type: TIMESTAMP
+      - name: earliest_condition_onset
+        expr: EARLIEST_CONDITION_ONSET
+        description: Date of earliest diagnosed condition
+        data_type: TIMESTAMP
+    facts:
+      - name: age
+        expr: AGE
+        description: Patient age in years
+        data_type: NUMBER
+      - name: total_observations
+        expr: TOTAL_OBSERVATIONS
+        description: Number of clinical observations
+        data_type: NUMBER
+      - name: lab_count
+        expr: LAB_COUNT
+        description: Number of lab results
+        data_type: NUMBER
+      - name: vitals_count
+        expr: VITALS_COUNT
+        description: Number of vital sign readings
+        data_type: NUMBER
+      - name: total_conditions
+        expr: TOTAL_CONDITIONS
+        description: Total number of diagnosed conditions
+        data_type: NUMBER
+      - name: active_conditions
+        expr: ACTIVE_CONDITIONS
+        description: Number of currently active conditions
+        data_type: NUMBER
+    metrics:
+      - name: patient_count
+        expr: COUNT(DISTINCT PATIENT_ID)
+        description: Number of patients
+      - name: avg_age
+        expr: AVG(AGE)
+        description: Average patient age
+      - name: high_risk_count
+        expr: COUNT(CASE WHEN COMPUTED_RISK_LEVEL = 'HIGH' THEN 1 END)
+        description: Number of high-risk patients
+      - name: avg_conditions
+        expr: AVG(ACTIVE_CONDITIONS)
+        description: Average number of active conditions per patient
+      - name: avg_observations
+        expr: AVG(TOTAL_OBSERVATIONS)
+        description: Average number of observations per patient
+
+  - name: RISK_PREDICTIONS
+    base_table:
+      database: AGENTIC_PLATFORM
+      schema: ML
+      table: RISK_PREDICTIONS
+    description: >
+      Machine learning risk prediction scores for each patient.
+      Includes original risk label and ML-predicted risk level.
+    dimensions:
+      - name: patient_id
+        expr: PATIENT_ID
+        description: Patient identifier
+        data_type: VARCHAR
+      - name: gender
+        expr: GENDER
+        description: Patient gender
+        data_type: VARCHAR
+      - name: risk_label
+        expr: RISK_LABEL
+        description: Original calculated risk label
+        data_type: VARCHAR
+      - name: predicted_risk
+        expr: PREDICTED_RISK
+        description: ML model predicted risk level
+        data_type: VARCHAR
+    facts:
+      - name: age
+        expr: AGE
+        description: Patient age
+        data_type: NUMBER
+      - name: risk_score
+        expr: RISK_SCORE
+        description: Numerical risk score (0-1)
+        data_type: FLOAT
+      - name: total_conditions
+        expr: TOTAL_CONDITIONS
+        description: Total conditions count
+        data_type: NUMBER
+      - name: active_conditions
+        expr: ACTIVE_CONDITIONS
+        description: Active conditions count
+        data_type: NUMBER
+    metrics:
+      - name: avg_risk_score
+        expr: AVG(RISK_SCORE)
+        description: Average risk score across patients
+      - name: prediction_accuracy
+        expr: >
+          COUNT(CASE WHEN RISK_LABEL = PREDICTED_RISK THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0)
+        description: Percentage of predictions matching original label
+
+  - name: FAERS_DEMO
+    base_table:
+      database: AGENTIC_PLATFORM
+      schema: DRUG_SAFETY
+      table: FAERS_DEMO
+    description: >
+      FDA Adverse Event Reporting System (FAERS) demo data with individual
+      adverse event reports including drug, indication, and outcome.
+    dimensions:
+      - name: case_id
+        expr: CASE_ID
+        description: Unique case identifier
+        data_type: VARCHAR
+      - name: drug_name
+        expr: DRUG_NAME
+        description: Name of the drug
+        data_type: VARCHAR
+      - name: indication
+        expr: INDICATION
+        description: Condition the drug is used for
+        data_type: VARCHAR
+      - name: adverse_event
+        expr: ADVERSE_EVENT
+        description: Reported adverse event
+        data_type: VARCHAR
+      - name: outcome
+        expr: OUTCOME
+        description: Patient outcome (Recovered, Hospitalization, etc.)
+        data_type: VARCHAR
+      - name: gender
+        expr: GENDER
+        description: Patient gender
+        data_type: VARCHAR
+      - name: reporter_type
+        expr: REPORTER_TYPE
+        description: Type of reporter (Healthcare Professional, Consumer, Other)
+        data_type: VARCHAR
+      - name: serious
+        expr: SERIOUS
+        description: Whether the event was serious (true/false)
+        data_type: VARCHAR
+    time_dimensions:
+      - name: report_date
+        expr: REPORT_DATE
+        description: Date the adverse event was reported
+        data_type: DATE
+    facts:
+      - name: age
+        expr: AGE
+        description: Patient age at time of report
+        data_type: NUMBER
+    metrics:
+      - name: total_reports
+        expr: COUNT(*)
+        description: Total number of adverse event reports
+      - name: serious_count
+        expr: "COUNT(CASE WHEN SERIOUS = 'true' THEN 1 END)"
+        description: Number of serious adverse events
+      - name: unique_drugs
+        expr: COUNT(DISTINCT DRUG_NAME)
+        description: Number of unique drugs reported
+      - name: unique_events
+        expr: COUNT(DISTINCT ADVERSE_EVENT)
+        description: Number of unique adverse event types
+
+  - name: SIGNAL_DETECTION
+    base_table:
+      database: AGENTIC_PLATFORM
+      schema: DRUG_SAFETY
+      table: SIGNAL_DETECTION
+    description: >
+      Drug safety signal detection results showing statistically significant
+      drug-adverse event pairs using PRR and ROR disproportionality measures.
+    dimensions:
+      - name: drug_name
+        expr: DRUG_NAME
+        description: Drug associated with the signal
+        data_type: VARCHAR
+      - name: adverse_event
+        expr: ADVERSE_EVENT
+        description: Adverse event in the signal pair
+        data_type: VARCHAR
+      - name: signal_status
+        expr: SIGNAL_STATUS
+        description: Whether this pair is flagged as a SIGNAL or NO_SIGNAL
+        data_type: VARCHAR
+    facts:
+      - name: de_count
+        expr: DE_COUNT
+        description: Drug-event pair count
+        data_type: NUMBER
+      - name: drug_total
+        expr: DRUG_TOTAL
+        description: Total reports for this drug
+        data_type: NUMBER
+      - name: event_total
+        expr: EVENT_TOTAL
+        description: Total reports for this event
+        data_type: NUMBER
+      - name: total_reports
+        expr: TOTAL_REPORTS
+        description: Total reports in the database
+        data_type: NUMBER
+      - name: prr
+        expr: PRR
+        description: Proportional Reporting Ratio
+        data_type: FLOAT
+      - name: ror
+        expr: ROR
+        description: Reporting Odds Ratio
+        data_type: FLOAT
+    metrics:
+      - name: signal_count
+        expr: "COUNT(CASE WHEN SIGNAL_STATUS = 'SIGNAL' THEN 1 END)"
+        description: Number of detected safety signals
+      - name: max_prr
+        expr: MAX(PRR)
+        description: Highest PRR value (strongest signal)
+      - name: avg_prr
+        expr: "AVG(CASE WHEN SIGNAL_STATUS = 'SIGNAL' THEN PRR END)"
+        description: Average PRR among confirmed signals
+
+relationships:
+  - name: patient_risk
+    left_table: PATIENT_360
+    right_table: RISK_PREDICTIONS
+    relationship_columns:
+      - left_column: PATIENT_ID
+        right_column: PATIENT_ID
+    join_type: left_outer
+    relationship_type: one_to_one
+
+verified_queries:
+  - question: How many patients are there?
+    sql: SELECT COUNT(*) AS patient_count FROM AGENTIC_PLATFORM.ANALYTICS.PATIENT_360
+    verified_at: "2026-03-26"
+    verified_by: system
+
+  - question: How many patients are high risk?
+    sql: >
+      SELECT COUNT(*) AS high_risk_count
+      FROM AGENTIC_PLATFORM.ANALYTICS.PATIENT_360
+      WHERE COMPUTED_RISK_LEVEL = 'HIGH'
+    verified_at: "2026-03-26"
+    verified_by: system
+
+  - question: What are the most common conditions?
+    sql: >
+      SELECT f.VALUE::STRING AS condition_name, COUNT(*) AS patient_count
+      FROM AGENTIC_PLATFORM.ANALYTICS.PATIENT_360,
+      LATERAL FLATTEN(input => CONDITION_LIST) f
+      GROUP BY 1 ORDER BY 2 DESC
+    verified_at: "2026-03-26"
+    verified_by: system
+
+  - question: Show patient demographics by risk level
+    sql: >
+      SELECT COMPUTED_RISK_LEVEL, GENDER, COUNT(*) AS count, AVG(AGE) AS avg_age
+      FROM AGENTIC_PLATFORM.ANALYTICS.PATIENT_360
+      GROUP BY 1, 2 ORDER BY 1, 2
+    verified_at: "2026-03-26"
+    verified_by: system
+
+  - question: What are the top drug safety signals?
+    sql: >
+      SELECT DRUG_NAME, ADVERSE_EVENT, PRR, ROR, DE_COUNT
+      FROM AGENTIC_PLATFORM.DRUG_SAFETY.SIGNAL_DETECTION
+      WHERE SIGNAL_STATUS = 'SIGNAL'
+      ORDER BY PRR DESC
+    verified_at: "2026-03-26"
+    verified_by: system
+
+  - question: How many adverse events were reported?
+    sql: SELECT COUNT(*) AS total_reports FROM AGENTIC_PLATFORM.DRUG_SAFETY.FAERS_DEMO
+    verified_at: "2026-03-26"
+    verified_by: system
+
+  - question: Show me the average risk score by gender
+    sql: >
+      SELECT GENDER, AVG(RISK_SCORE) AS avg_risk_score, COUNT(*) AS patient_count
+      FROM AGENTIC_PLATFORM.ML.RISK_PREDICTIONS
+      GROUP BY 1
+    verified_at: "2026-03-26"
+    verified_by: system
+
+  - question: Which drugs have the most adverse events?
+    sql: >
+      SELECT DRUG_NAME, COUNT(*) AS report_count,
+        COUNT(DISTINCT ADVERSE_EVENT) AS unique_events
+      FROM AGENTIC_PLATFORM.DRUG_SAFETY.FAERS_DEMO
+      GROUP BY 1 ORDER BY 2 DESC LIMIT 10
+    verified_at: "2026-03-26"
+    verified_by: system
+
+custom_instructions: >
+  This is a healthcare analytics platform. When answering questions:
+  - PATIENT_360 is the primary patient table with enriched demographics and risk levels.
+  - RISK_PREDICTIONS contains ML-generated risk scores; join to PATIENT_360 on PATIENT_ID.
+  - FAERS_DEMO contains individual FDA adverse event reports.
+  - SIGNAL_DETECTION contains statistically significant drug-event signal pairs.
+  - Risk levels are LOW, MODERATE, and HIGH.
+  - Signal detection uses PRR (Proportional Reporting Ratio) and ROR (Reporting Odds Ratio).
+  - A PRR > 2 with DE_COUNT >= 3 typically indicates a safety signal.
+  - Always use the fully qualified table name (AGENTIC_PLATFORM.SCHEMA.TABLE).
